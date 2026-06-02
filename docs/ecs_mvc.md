@@ -1,300 +1,172 @@
-# ECS, MVC, Data Driven and Design Patterns
+# ECS, MVC, Data-Driven, and Design Patterns
 
 # Architectural Patterns & Core Principles
 
-By separating your core simulation logic from any specific game engine (like Godot), you can build a clean, modular, and professional codebase. Here is how your architectural paradigms fit together:
+By separating your core simulation logic from any specific game engine (like Godot), you can build a clean, modular, and professional codebase. Here is how your architectural paradigms fit together when mapping Model-View-Controller (MVC) over a high-performance Entity Component System (ECS):
 
 ```mermaid
 graph TD
-    subgraph Controller [Controller Layer]
-        Engine[ScenarioEngine] -->|Invokes| Cmd[ICommand Architecture]
+    subgraph Controller [Controller / Systems Layer]
+        Engine[ScenarioEngine / GameController] -->|Pushes Data Packets| Cmd[ICommand Transaction Queue]
+        Sys[Stateless Processing Systems] -->|Executes Logic| Cmd
     end
 
-    subgraph Model [Model Layer: ECS Ecosystem]
-        World[WorldState Registry] -->|Manages| Ent[Generic Entity Buckets]
-        Ent -->|Composed of| Comp1[Identity Component]
-        Ent -->|Composed of| Comp2[Stats Component]
-        Ent -->|Composed of| Comp3[Traits/Skills Component]
+    subgraph Model [Model Layer: True ECS Registry]
+        World[WorldRegistry] -->|Dense Contiguous Memory Arrays| Comp1[IdentityComponent Array]
+        World -->|Parallel Memory Chunks| Comp2[StatsComponent Array]
+        World -->|Parallel Memory Chunks| Comp3[EquipmentComponent Array]
     end
 
-    subgraph View [View Layer]
-        V1[Console View]
-        V2[Godot Node View]
+    subgraph View [View Layer: Stateless Observers]
+        V1[Console Frame View]
+        V2[Godot Scene Node View]
     end
 
-    Engine -->|Mutates via Commands| World
-    V1 -->|Reads Data Only| Model
-    V2 -->|Reads Data Only| Model
+    Cmd -->|Mutates contiguous memory via ref| World
+    V1 -->|Reads Data Only via ReadOnlySpan & in| Model
+    V2 -->|Reads Data Only via ReadOnlySpan & in| Model
 
 ```
 
 ## 1. Entity Component System (ECS) & Composition
 
-Instead of building deep, fragile Object-Oriented inheritance trees (e.g., `Monk` inherits from `Character` inherits from `Agent` inherits from `PhysicsBody`), this architecture relies on **Pure Data Composition**.
+Instead of building deep, fragile Object-Oriented inheritance trees (e.g., `Monk` inherits from `Character` inherits from `Agent` inherits from `PhysicsBody`), this architecture relies on **Pure Data Composition** optimized for hardware performance.
 
 ### Core Concepts of your ECS
 
-* **The Entity:** A lightweight, generic container stripped of all inherent behavior. It functions essentially as a tracking ID bucket.
-* **The Component/Trait:** Pure data bags containing variables, IDs, coordinates, lists, or strings. They possess absolutely zero behavioral logic, system loops, or rendering instructions.
-* **Dynamic Mutation:** States, roles, and behaviors can be injected into or stripped away from entities completely at runtime without breaking underlying class definitions.
+* **The Entity:** A lightweight identifier (a simple `int` or `Guid`). It has no data or behavior; it acts strictly as an array index anchor to tie detached data blocks together.
+* **The Component:** Pure unmanaged value types (`struct`). They hold layout variables (integers, floats, booleans) but contain **zero methods or behavioral logic**.
+* **The System:** Completely stateless classes containing the calculations and rules of your world. Systems query matching components as continuous blocks of memory to iterate through them at maximum hardware speed.
 
-### The Anatomy of Composition vs. Inheritance
+## 2. Model-View-Controller (MVC) Alignment
 
-A traditional inheritance model rigidly binds an object's capabilities at compile-time. If an automated routine requires a character to become a merchant, an inheritance model breaks down. The ECS ecosystem solves this seamlessly:
+The integration of ECS into an MVC setup demands strict boundaries to protect the data layer:
 
-```mermaid
-graph LR
-    subgraph Hardcoded Inheritance Trap
-        C[Agent] --> D[NPC]
-        D --> E[Monk]
-        D --> F[Merchant]
-        F --> G[MonkMerchant?? - Class Explosion]
-    end
+* **The Model (Data):** The `WorldRegistry` hosting dense, sequential arrays of raw component structs. It holds structural numbers but has no concept of loops or graphics.
+* **The Controller (Logic):** The `GameController`, stateless simulation systems, and `ICommand` transaction buffers. They schedule time frames, calculate statistics, and modify the Model.
+* **The View (Presentation):** Stateless systems (like `RenderObserverSystem`) that translate internal data changes into viewport adjustments. The View reads data passively via fast reference semantics (`in` and `ReadOnlySpan<T>`) without modifying values or allocating memory.
 
-    subgraph Dynamic ECS Composition
-        Entity[Generic Entity Container] -->|Add| C1[PositionTrait]
-        Entity -->|Add| C2[ScheduleTrait]
-        Entity -->|Add at Runtime| C3[TradeTrait]
-    end
+## 3. Data-Driven Foundation
 
-```
+Hardcoding structural game variables within C# source files produces rigid code. By using a data-driven structure, archetypes are defined entirely inside external configuration files (like `definitions.json`). At boot time, the engine reads these structures and feeds them directly into an **Abstract Factory**, which populates the dense component matrices of the Model layer.
 
-### Why the ECS Structure is Superior
+---
 
-Most indie games tie data, logic, and rendering into one single messy knot within engine scripts. By treating entities as raw data matrices managed via optimized collections, your simulation layer remains highly performant, fully moddable, and capable of simulating a deep, living clockwork world completely independent of visual frames.
+# Design Patterns Applied to MVC & ECS
 
-## 2. Model-View-Controller (MVC)
+To keep these layers decoupled without destroying memory performance, we rely on targeted design patterns re-engineered for unmanaged value tracking.
 
-Your system maintains a strict separation of concerns between your data, your logic, and your display boundaries:
+### 1. Abstract Factory Pattern (Creational)
 
-* **The Model:** Handled entirely by your **ECS Ecosystem** (`WorldState`, `Entity`, and all raw data components). They store values but contain zero operational calculations or engine rendering loops.
-* **The Controller:** Managed by the `ScenarioEngine`, `SimulationController`, and your `ICommand` processing pipelines. They evaluate variables, calculate simulation weights, tick the timeline forward, and mutate the components within the Model.
-* **The View:** Your active rendering layer. This starts as a lightweight console rendering system but can be smoothly swapped for **Godot Nodes** (Sprites, Tilemaps, and UI elements). The View only reads structural states from the Model to render them; it is strictly prohibited from mutating data directly.
+* **The Boundary:** Controller $\rightarrow$ Model
+* **The Problem:** The world generation setup needs to populate the world from a JSON configuration file. Instantiating concrete object references directly inside loading scripts couples the system to a single runtime setup.
+* **The Solution:** The engine calls an abstract interface contract (`IEntityFactory`). By injecting a different factory implementation, you can switch from building minimal data blocks for headless server unit tests to initializing full engine scene states without changing your core generation rules.
 
-## 3. Data-Driven Entities
+### 2. Command Pattern (Behavioral)
 
-The codebase strictly separates structural game configuration from compilation logic.
+* **The Boundary:** Controller $\rightarrow$ Model Mutation
+* **The Problem:** Having systems or input elements invoke structural transformations directly causes code dependencies and messy switch-case branching statements.
+* **The Solution:** Actions (like moves or attacks) are packaged into standalone, lightweight transactional data structures. The controller manages these inside flat queues, allowing actions to be intercepted, fast-forwarded during history timeline generations, or safely scheduled across parallel worker threads.
 
-* The structural matrix of your game world—the room layouts, item types, class parameters, and starter skills—is defined entirely outside your code files in configuration blueprints like `definitions.json`.
-* Your C# core logic doesn't care if it's building a medieval monastery or a sci-fi lunar base; it simply ingests the data models at run-time, passing them to factories to populate your ECS containers dynamically.
+### 3. Flyweight Pattern (Structural)
 
-# Design Patterns
+* **The Boundary:** Model Data Storage
+* **The Problem:** If thousands of active entities copy identical configuration data (like base statistics, name strings, or sprite file pathways) into their components, memory consumption bloats, clearing out the CPU's hardware cache lines.
+* **The Solution:** Component structures drop heavy reference allocations. They hold a single integer lookup identifier that targets a master configuration array loaded once from the JSON file.
 
-## 1. Abstract Factory Pattern (Designing for Change)
+### 4. Observer Pattern via Tracking Flags (Behavioral)
 
-> **Design Axiom:** Avoid creating an object by specifying a class explicitly. Specifying a class name when you create an object commits you to a particular implementation instead of a particular interface. This commitment can complicate future changes. To avoid it, create objects indirectly.
+* **The Boundary:** Model $\rightarrow$ View Synchronicity
+* **The Problem:** Traditional C# events use heavy delegate pointers. If attached inside a component struct, they break its value semantics and cause memory fragmentation.
+* **The Solution:** Components feature a simple boolean flag (`IsDirty`). The View systems filter these bits at the end of an execution frame, reading the values to refresh graphic progressive bars or UI node states with zero allocation overhead.
 
-### The Anatomy of your Abstract Factory
+---
 
-The **Abstract Factory Pattern** decouples your core game systems from concrete instantiation keywords (`new`), splitting creation into two parts:
+# Complete Architectural Refactoring
 
-1. **The Abstract Interface:** Specifies what *can* be built, refusing to declare concrete class constraints.
-2. **The Client (`ScenarioEngine`):** Demands an abstract factory implementation via constructor injection, preventing the engine from hardcoding dependencies.
+Below is the complete, high-performance implementation of this architecture in C#, utilizing `struct`, `ref`, `in`, and `Span<T>` to maintain continuous data locality and eliminate cache misses.
 
-```mermaid
-flowchart LR
-    A["ScenarioEngine (Client)"]
-    --> B["IEntityFactory (Interface)"]
-    --> C["Returns Abstract Entity/Room/Item Framework"]
+To make the architecture entirely complete, the exact data layout for `definitions.json` must match the data transfer objects (`GameDataDefinitions` and `ClassDefinition`) expected by the C# deserializer.
 
-```
+Here is the file structure that bridges the data-driven configuration file directly to your memory arrays:
 
-#### The Abstract Interface Blueprint
-
-```csharp
-public interface IEntityFactory 
-{
-    NPC CreateNPC(string name);
-    Room CreateRoom(string type);
-    Item CreateItem(string name);
-}
-
-```
-
-#### Avoid the Explicit Class Trap
-
-Look at how a poor design breaks flexibility by tightly coupling the engine loop to a local console implementation:
-
-```csharp
-// BAD DESIGN: Hardcoding 'new Room()' chains this engine permanently to a Console app
-public class BadScenarioEngine 
-{
-    public WorldState Generate() 
-    {
-        var state = new WorldState();
-        foreach (var rt in _defs.RoomTypes) 
-        {
-            Room consoleRoom = new Room(rt.Type); // TRAP!
-            state.Locations.Add(consoleRoom);
-        }
-        return state;
-    }
-}
-
-```
-
-### The Big Payoff: Migrating to Game Engines (Godot)
-
-Because your production engine talks exclusively to an abstraction, migrating from a text application to a live graphical rendering pipeline requires **zero changes** to your simulation loops. You simply swap the underlying concrete factory implementation:
-
-```csharp
-// For Console Development
-public class CoreEntityFactory : IEntityFactory
-{
-    public Room CreateRoom(string type) => new ConsoleDataRoom(type);
-}
-
-// For Live Godot Deployment
-public class GodotNodeFactory : IEntityFactory
-{
-    // Spawns a real Godot PackedScene/Node3D under the hood!
-    public Room CreateRoom(string type) => new GodotRoomNode(type); 
-}
-
-```
-
-## 2. Command Pattern (Avoiding Hard-Coded Requests)
-
-> **Design Axiom:** Avoid hard-coded requests. Dependence on specific operations commits you to one way of satisfying a request. By avoiding hard-coded requests, you make it easier to change the way a request gets satisfied both at compile-time and at run-time.
-
-Instead of making hard-coded operational calls directly on your ECS entities or components, every state mutation, timeline track, and narrative shift is encapsulated into a standalone action capsule implementing an **`ICommand`** interface.
-
-```csharp
-public interface ICommand
-{
-    void Execute(WorldState state);
-}
-
-```
-
-### Eliminating Compile-Time Hardcoding
-
-A fragile implementation forces the core loop to know the explicit, specialized internal methods of every single entity type:
-
-```csharp
-// BAD DESIGN: Rigid compile-time dependence on specific methods
-if (currentTime == model.CrimeTime)
-{
-    killer.Stab(victim);         // Fragile method dependency 1
-    innocentMonk.GoToSleep();     // Fragile method dependency 2
-}
-
-```
-
-Your architecture eliminates this entirely. The timeline executor evaluates a uniform collection of polymorphic commands without knowing their underlying execution rules:
-
-```csharp
-// YOUR DESIGN: Zero dependence on specific operations!
-var commandQueue = new List<ICommand>();
-
-queue.Add(new ExecuteMurderCommand(killer, victim, scene, currentTime));
-queue.Add(new PerformAttendMassCommand(npc, targetRoom, currentTime, liturgy));
-
-foreach (var command in commandQueue)
-{
-    command.Execute(model); // The engine is completely blind to the internal logic!
-}
-
-```
-
-### Dynamic Run-Time Flexibility
-
-Because behaviors are encapsulated in isolated command objects, your systems can intercept, clear, override, or inject commands dynamically based on environmental changes (e.g., clearing an NPC's routine commands to inject an emergency evacuation command if a fire event occurs).
-
-## 3. Programming to an Interface, Not an Implementation
-
-> **Design Axiom:** Don't declare variables to be instances of particular concrete classes. Instead, commit only to an interface defined by an abstract class... Creational patterns ensure that your system is written in terms of interfaces, not implementations.
-
-When you write code like `Dog myDog = new Dog();`, your application becomes tightly coupled to that exact blueprint. Programming to interfaces masks the concrete implementation.
-
-### Resolving the Creational Paradox
-
-You must use the `new` keyword somewhere to instantiate objects in memory. Creational patterns resolve this by **isolating the instantiation damage**.
-
-By confining the `new` keyword within an isolated factory clean-room, $95\%$ of your codebase remains entirely agnostic of concrete types. This allows abstract classes and interfaces to be freely manipulated throughout the core engine logic, leaving the factory to quietly resolve concrete details transparently behind the scenes.
-
-# Complete Implementation Architecture: Data-Driven RPG
-
-This cohesive implementation demonstrates an **Entity Component System (ECS)** model managed via an **Abstract Factory** configuration, driven by an external JSON data structure, and mutated via the **Command Pattern**.
-
-### 1. Configuration File: `definitions.json`
+### File: `definitions.json`
 
 ```json
 {
   "Classes": {
-    "Warrior": {
-      "BaseStats": { "Health": 150, "Mana": 0 },
-      "Equipment": { "WeaponType": "Sword", "Damage": "15" },
-      "Skills": { "OneHanded": 1 }
+    "Hero": {
+      "BaseHealth": 100,
+      "BaseMana": 50,
+      "BaseDamage": 15
     },
-    "Wizard": {
-      "BaseStats": { "Health": 80, "Mana": 100 },
-      "Equipment": { "WeaponType": "Staff", "Damage": "5" },
-      "Skills": { "Illusion": 1 }
-    }
-  },
-  "Races": {
-    "Human": {
-      "StatModifiers": { "Health": 0, "Mana": 10 }
-    },
-    "Orc": {
-      "StatModifiers": { "Health": 20, "Mana": -10 }
+    "Goblin": {
+      "BaseHealth": 30,
+      "BaseMana": 0,
+      "BaseDamage": 6
     }
   }
 }
 
 ```
 
-### 2. Source Code Implementation
+### How the Data Flows From JSON to Memory Arrays
 
-#### File: `Components.cs` (The ECS Data Model)
+When the application boots, the JSON structure above maps directly through the C# system layer like this:
+
+```mermaid
+graph TD
+    JSON[definitions.json file] -->|1. System.IO reads text| Serializer[JsonSerializer.Deserialize]
+    Serializer -->|2. Maps to DTO| DTO[GameDataDefinitions C# Object]
+    DTO -->|3. Read by class name key| Factory[GameEntityFactory.CreateEntity]
+    Factory -->|4. Writes value fields via ref| Registry[WorldRegistry Dense Memory Arrays]
+
+```
+
+1. **`definitions.json`**: Contains your structural configuration data, separated from the compiled executable.
+2. **`DataTransferObjects.cs`**: Provides strong-typed contracts (`GameDataDefinitions`) to temporarily hold the data in memory immediately after parsing.
+3. **`GameEntityFactory.cs`**: Looks up the class name inside the parsed dictionary (e.g., `"Hero"`), extracts the raw integer numbers, grabs a fresh index from the registry, and copies those values directly into the physical `struct` array slot using `ref`.
+
+Once the step is done, the initial temporary JSON objects can be safely garbage collected, while your game loops operate purely on flat, fast, contiguous hardware caches.
+
+
+
+
+
+### File: `Components.cs` (The Pure Value Model Layer)
 
 ```csharp
 using System;
-using System.Collections.Generic;
 
 namespace RpgCore.Model
 {
-    public class IdentityComponent 
+    // High-performance value types stored contiguously in memory arrays
+    public struct IdentityComponent 
     {
-        public string Name { get; set; }
-        public string Race { get; set; }    
-        public string Class { get; set; }   
+        public int EntityId;
+        public int DefinitionIndex; // Flyweight pointer targeting the master JSON definition array
     }
 
-    public class StatsComponent 
+    public struct StatsComponent 
     {
-        public int Health { get; set; }
-        public int Mana { get; set; }
-        public int PositionX { get; set; }
-        public int PositionY { get; set; }
+        public int EntityId;
+        public int Health;
+        public int Mana;
+        public int PositionX;
+        public int PositionY;
+        public bool IsDirty; // Structural flag monitored by reactive Viewport observers
     }
 
-    public class SkillsComponent 
+    public struct EquipmentComponent 
     {
-        public Dictionary<string, int> SkillLevels { get; set; } = new();
-    }
-
-    public class EquipmentComponent 
-    {
-        public string WeaponType { get; set; } 
-        public int Damage { get; set; }
-    }
-
-    // Pure ECS Container using Component Composition
-    public class Entity 
-    {
-        public Guid Id { get; } = Guid.NewGuid();
-        public IdentityComponent Identity { get; set; } = new();
-        public StatsComponent Stats { get; set; } = new();
-        public SkillsComponent Skills { get; set; } = new();
-        public EquipmentComponent Equipment { get; set; } = new();
+        public int EntityId;
+        public int Damage;
     }
 }
 
 ```
 
-#### File: `DataTransferObjects.cs`
+### File: `DataTransferObjects.cs` (External Blueprint Data Configurations)
 
 ```csharp
 using System.Collections.Generic;
@@ -304,25 +176,50 @@ namespace RpgCore.Data
     public class GameDataDefinitions
     {
         public Dictionary<string, ClassDefinition> Classes { get; set; } = new();
-        public Dictionary<string, RaceDefinition> Races { get; set; } = new();
     }
 
     public class ClassDefinition
     {
-        public Dictionary<string, int> BaseStats { get; set; } = new();
-        public Dictionary<string, string> Equipment { get; set; } = new();
-        public Dictionary<string, int> Skills { get; set; } = new();
-    }
-
-    public class RaceDefinition
-    {
-        public Dictionary<string, int> StatModifiers { get; set; } = new();
+        public int BaseHealth { get; set; }
+        public int BaseMana { get; set; }
+        public int BaseDamage { get; set; }
     }
 }
 
 ```
 
-#### File: `IEntityFactory.cs` & `GameEntityFactory.cs` (Abstract Factory)
+### File: `WorldRegistry.cs` (Contiguous Parallel Array Memory)
+
+```csharp
+using System;
+using RpgCore.Model;
+
+namespace RpgCore.Model
+{
+    public class WorldRegistry
+    {
+        // Dense sequential memory buffers optimized for CPU prefetching
+        private readonly StatsComponent[] _statsArrays = new StatsComponent[1024];
+        private readonly EquipmentComponent[] _equipmentArrays = new EquipmentComponent[1024];
+        private int _nextId = 0;
+
+        public int AllocateNewEntityId() => _nextId++;
+
+        // Exposes elements by reference to modify memory slots in-place without copying
+        public ref StatsComponent GetStatsModifiable(int id) => ref _statsArrays[id];
+        public ref EquipmentComponent GetEquipmentModifiable(int id) => ref _equipmentArrays[id];
+
+        // Exposes element with read-only semantics for maximum lookup speed
+        public in EquipmentComponent GetEquipmentReadOnly(int id) => ref _equipmentArrays[id];
+
+        // Provides a continuous hardware window slice for ultra-fast system sweeps
+        public Span<StatsComponent> GetStatsSpan() => _statsArrays.AsSpan(0, _nextId);
+    }
+}
+
+```
+
+### File: `IEntityFactory.cs` & `GameEntityFactory.cs` (Creational Layer)
 
 ```csharp
 using System;
@@ -335,138 +232,108 @@ namespace RpgCore.Factories
 {
     public interface IEntityFactory
     {
-        Entity CreateEntity(string race, string className, string name);
+        int CreateEntity(string className);
     }
 
     public class GameEntityFactory : IEntityFactory
     {
         private readonly GameDataDefinitions _definitions;
+        private readonly WorldRegistry _registry;
 
-        public GameEntityFactory(string jsonFilePath)
+        public GameEntityFactory(string jsonFilePath, WorldRegistry registry)
         {
-            if (!File.Exists(jsonFilePath))
-                throw new FileNotFoundException($"Definitions file missing at: {jsonFilePath}");
-
             string jsonString = File.ReadAllText(jsonFilePath);
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            _definitions = JsonSerializer.Deserialize<GameDataDefinitions>(jsonString, options) 
-                           ?? new GameDataDefinitions();
+            _definitions = JsonSerializer.Deserialize<GameDataDefinitions>(jsonString, 
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new GameDataDefinitions();
+            _registry = registry;
         }
 
-        public Entity CreateEntity(string race, string className, string name)
+        public int CreateEntity(string className)
         {
-            if (!_definitions.Classes.ContainsKey(className))
-                throw new ArgumentException($"Class definition for '{className}' not found.");
-            if (!_definitions.Races.ContainsKey(race))
-                throw new ArgumentException($"Race definition for '{race}' not found.");
+            if (!_definitions.Classes.TryGetValue(className, out var classDef))
+                throw new ArgumentException($"Data Blueprint Class '{className}' not discovered.");
 
-            var classDef = _definitions.Classes[className];
-            var raceDef = _definitions.Races[race];
+            // Factory returns a flat tracking index while appending values directly into dense arrays
+            int entityId = _registry.AllocateNewEntityId();
 
-            var entity = new Entity();
+            ref var stats = ref _registry.GetStatsModifiable(entityId);
+            stats.EntityId = entityId;
+            stats.Health = classDef.BaseHealth;
+            stats.Mana = classDef.BaseMana;
+            stats.IsDirty = true;
 
-            entity.Identity = new IdentityComponent { Name = name, Race = race, Class = className };
+            ref var equip = ref _registry.GetEquipmentModifiable(entityId);
+            equip.EntityId = entityId;
+            equip.Damage = classDef.BaseDamage;
 
-            int baseHealth = classDef.BaseStats.GetValueOrDefault("Health", 100);
-            int baseMana = classDef.BaseStats.GetValueOrDefault("Mana", 0);
-
-            if (raceDef.StatModifiers.TryGetValue("Health", out int healthMod)) baseHealth += healthMod;
-            if (raceDef.StatModifiers.TryGetValue("Mana", out int manaMod)) baseMana += manaMod;
-
-            entity.Stats = new StatsComponent
-            {
-                PositionX = 0,
-                PositionY = 0,
-                Health = baseHealth,
-                Mana = baseMana
-            };
-
-            entity.Equipment = new EquipmentComponent
-            {
-                WeaponType = classDef.Equipment.GetValueOrDefault("WeaponType", "Unarmed"),
-                Damage = int.TryParse(classDef.Equipment.GetValueOrDefault("Damage", "0"), out int dmg) ? dmg : 0
-            };
-
-            foreach (var skill in classDef.Skills)
-            {
-                entity.Skills.SkillLevels[skill.Key] = skill.Value;
-            }
-
-            return entity;
+            return entityId;
         }
     }
 }
 
 ```
 
-#### File: `Commands.cs` (Command Architecture)
+### File: `Commands.cs` (Transactional Controller Pipelines)
 
 ```csharp
 using System;
 using RpgCore.Model;
-using RpgCore.Controllers;
 
 namespace RpgCore.Commands
 {
     public interface ICommand
     {
-        void Execute(GameController context);
+        void Execute(WorldRegistry registry);
     }
 
-    public class MoveCommand : ICommand
+    public struct MoveCommand : ICommand
     {
-        private readonly Guid _entityId;
+        private readonly int _entityId;
         private readonly int _deltaX;
         private readonly int _deltaY;
 
-        public MoveCommand(Guid entityId, int deltaX, int deltaY)
+        public MoveCommand(int entityId, int deltaX, int deltaY)
         {
             _entityId = entityId;
             _deltaX = deltaX;
             _deltaY = deltaY;
         }
 
-        public void Execute(GameController context)
+        public void Execute(WorldRegistry registry)
         {
-            var entity = context.GetEntity(_entityId);
-            if (entity != null)
-            {
-                entity.Stats.PositionX += _deltaX;
-                entity.Stats.PositionY += _deltaY;
-                context.View.OnEntityMoved(entity);
-            }
+            // Mutates raw values inside their pre-allocated slots using reference pointers
+            ref var stats = ref registry.GetStatsModifiable(_entityId);
+            stats.PositionX += _deltaX;
+            stats.PositionY += _deltaY;
+            stats.IsDirty = true; // Alerts observer systems that updates are pending
         }
     }
 
-    public class AttackCommand : ICommand
+    public struct AttackCommand : ICommand
     {
-        private readonly Guid _attackerId;
-        private readonly Guid _targetId;
+        private readonly int _attackerId;
+        private readonly int _targetId;
 
-        public AttackCommand(Guid attackerId, Guid targetId)
+        public AttackCommand(int attackerId, int targetId)
         {
             _attackerId = attackerId;
             _targetId = targetId;
         }
 
-        public void Execute(GameController context)
+        public void Execute(WorldRegistry registry)
         {
-            var attacker = context.GetEntity(_attackerId);
-            var target = context.GetEntity(_targetId);
+            in var attackerEquip = ref registry.GetEquipmentReadOnly(_attackerId);
+            ref var targetStats = ref registry.GetStatsModifiable(_targetId);
 
-            if (attacker != null && target != null)
-            {
-                int damage = attacker.Equipment.Damage;
-                target.Stats.Health -= damage;
-                context.View.OnEntityAttacked(attacker, target, damage);
-            }
+            targetStats.Health -= attackerEquip.Damage;
+            targetStats.IsDirty = true;
         }
     }
 }
 
 ```
 
-#### File: `Views.cs` (The View Interface Layer)
+### File: `Views.cs` (The Stateless View Layer)
 
 ```csharp
 using System;
@@ -474,65 +341,26 @@ using RpgCore.Model;
 
 namespace RpgCore.Views
 {
-    public interface IGameView
+    public class ConsoleGameView
     {
-        void OnEntityMoved(Entity entity);
-        void OnEntityAttacked(Entity attacker, Entity target, int damage);
-    }
-
-    public class ConsoleGameView : IGameView
-    {
-        public void OnEntityMoved(Entity entity)
+        // Processes continuous memory windows using read-only structures with no stack allocation copies
+        public void RenderFrameUpdates(ReadOnlySpan<StatsComponent> statsSlices)
         {
-            Console.WriteLine($"[View Alert] {entity.Identity.Name} shifted coordinates to ({entity.Stats.PositionX}, {entity.Stats.PositionY})");
-        }
-
-        public void OnEntityAttacked(Entity attacker, Entity target, int damage)
-        {
-            Console.WriteLine($"[View Alert] {attacker.Identity.Name} dealt {damage} damage to {target.Identity.Name}. (Target HP: {target.Stats.Health})");
-        }
-    }
-}
-
-```
-
-#### File: `GameController.cs` (The Central Controller Pipeline)
-
-```csharp
-using System;
-using System.Collections.Generic;
-using RpgCore.Model;
-using RpgCore.Views;
-using RpgCore.Commands;
-
-namespace RpgCore.Controllers
-{
-    public class GameController
-    {
-        private readonly Dictionary<Guid, Entity> _entities = new();
-        private readonly Queue<ICommand> _commandQueue = new();
-        
-        public IGameView View { get; }
-
-        public GameController(IGameView view)
-        {
-            View = view;
-        }
-
-        public void AddEntity(Entity entity) => _entities[entity.Id] = entity;
-        public Entity GetEntity(Guid id) => _entities.GetValueOrDefault(id);
-
-        public void EnqueueCommand(ICommand command)
-        {
-            _commandQueue.Enqueue(command);
-        }
-
-        public void ProcessPipeline()
-        {
-            while (_commandQueue.Count > 0)
+            for (int i = 0; i < statsSlices.Length; i++)
             {
-                var command = _commandQueue.Dequeue();
-                command.Execute(this);
+                in var stats = ref statsSlices[i];
+                if (stats.IsDirty)
+                {
+                    Console.WriteLine($"[Render View] Entity ID: {stats.EntityId} shifted to ({stats.PositionX}, {stats.PositionY}) | Health: {stats.Health}");
+                }
+            }
+        }
+
+        public void FlushDirtyFlags(Span<StatsComponent> statsSlices)
+        {
+            for (int i = 0; i < statsSlices.Length; i++)
+            {
+                statsSlices[i].IsDirty = false;
             }
         }
     }
@@ -540,55 +368,95 @@ namespace RpgCore.Controllers
 
 ```
 
-#### File: `Program.cs` (Application Lifecycle Entry)
+### File: `GameController.cs` (Central Control System)
 
 ```csharp
-using System;
-using RpgCore.Controllers;
-using RpgCore.Views;
-using RpgCore.Factories;
-using RpgCore.Model;
+using System.Collections.Generic;
 using RpgCore.Commands;
+using RpgCore.Model;
 
-public class Program
+namespace RpgCore.Controllers
 {
-    public static void Main()
+    public class GameController
     {
-        string configPath = "definitions.json";
+        private readonly Queue<ICommand> _commandQueue = new();
+        public WorldRegistry Registry { get; } = new();
 
-        IGameView gameView = new ConsoleGameView();
-        GameController controller = new GameController(gameView);
-        IEntityFactory factory = new GameEntityFactory(configPath);
+        public void EnqueueCommand(ICommand command) => _commandQueue.Enqueue(command);
 
-        // Assembling pure data ECS components via the abstract factory
-        Entity hero = factory.CreateEntity("Human", "Wizard", "Gandalf");
-        Entity antagonist = factory.CreateEntity("Orc", "Warrior", "Thrall");
-
-        controller.AddEntity(hero);
-        controller.AddEntity(antagonist);
-
-        Console.WriteLine("======= Engine Log: Processing System Timeline =======");
-
-        controller.EnqueueCommand(new MoveCommand(hero.Id, 5, -2));
-        controller.EnqueueCommand(new AttackCommand(antagonist.Id, hero.Id));
-
-        controller.ProcessPipeline();
-        
-        Console.WriteLine("=====================================================");
+        public void ProcessPipelineFrame()
+        {
+            while (_commandQueue.Count > 0)
+            {
+                var command = _commandQueue.Dequeue();
+                command.Execute(Registry);
+            }
+        }
     }
 }
 
 ```
 
----
+### File: `Program.cs` (Application Driver)
 
-# Future Design Patterns Expandability
+```csharp
+using System;
+using RpgCore.Controllers;
+using RpgCore.Factories;
+using RpgCore.Commands;
+using RpgCore.Views;
 
-Because you have established a foundational architecture based on strict separation of concerns, your engine can seamlessly integrate complementary design patterns to solve advanced structural challenges.
+public class Program
+{
+    public static void Main()
+    {
+        Console.WriteLine("=== Commencing High-Performance ECS / MVC Simulation ===");
 
-| Pattern | Architectural Placement | Primary Optimization |
-| --- | --- | --- |
-| **Flyweight** *(Structural)* | Model / Deserialization Layer | Eliminates memory bloat by referencing shared data nodes from `definitions.json` across thousands of distinct ECS entities instead of copying matching text blocks. |
-| **Observer** *(Behavioral)* | Between Model and View Layers | Automatically alerts engine rendering nodes (like Godot Scenes) immediately when internal ECS component states change without linking core simulation code to engine libraries. |
-| **State** *(Behavioral)* | Controller / AI System Layer | Encapsulates complex entity routines into dedicated, clean class capsules (e.g., `PanicState`, `PatrolState`), avoiding monolithic switch and conditional statements within processing blocks. |
-| **Mediator** *(Behavioral)* | Controller / Global Pipeline | Provides a localized message broker where independent systems (e.g., `CrimeDetectionSystem`, `AIPathingSystem`) broadcast and consume events without maintaining tight references to each other. |
+        // 1. Initialize the Core Ecosystem Components
+        var controller = new GameController();
+        var view = new ConsoleGameView();
+
+        // 2. Point the abstract factory to the physical asset on disk
+        // The engine reads this asset once at boot time to drive configuration logic
+        var factory = new GameEntityFactory("definitions.json", controller.Registry);
+
+        // 3. Assemble dynamic entities into flat unmanaged memory slots via data blueprints
+        int playerEntity = factory.CreateEntity("Hero");
+        int enemyEntity = factory.CreateEntity("Goblin");
+
+        // 4. Queue real-time operational commands into the simulation timeline
+        controller.EnqueueCommand(new MoveCommand(playerEntity, 5, -2));
+        controller.EnqueueCommand(new AttackCommand(playerEntity, enemyEntity));
+
+        // 5. Run the transaction queue execution frame
+        controller.ProcessPipelineFrame();
+
+        // 6. Update the stateless Presentation View layer 
+        var statsWindow = controller.Registry.GetStatsSpan();
+        view.RenderFrameUpdates(statsWindow);
+        view.FlushDirtyFlags(statsWindow);
+
+        Console.WriteLine("=======================================================");
+    }
+}
+```
+
+### The Architectural Blueprint
+
+Now that the file handles raw disk input directly, the streaming sequence strictly follows these operational lanes:
+
+```mermaid
+graph LR
+    Disk[Asset Folder: definitions.json] -->|Stream Ingest| Factory[GameEntityFactory]
+    Factory -->|Populates By Ref| Registry[WorldRegistry Memory Banks]
+    
+    subgraph Execution Loop [Controller Frame Pipeline]
+        Commands[Command Queue] -->|Process Transactions| Registry
+    end
+    
+    Registry -->|ReadOnly Slices| View[Stateless Engine Renderers]
+
+```
+
+* **No String Interceptions:** The data stream directly converts characters from your asset disk space straight into primitive fields inside the factory cache.
+* **Separation of Concerns:** If a game designer edits `definitions.json` to change the Goblin's `BaseHealth` to `50`, the compiled codebase is completely untouched. The engine loads the adjusted parameters on the next frame cycle, initializing the structural value components with zero friction.
