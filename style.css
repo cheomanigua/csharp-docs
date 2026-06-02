@@ -1,0 +1,154 @@
+/* --- Global & Layout --- */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    display: flex;
+    margin: 0;
+    color: #333;
+		line-height: 1.5;
+}
+html { scroll-behavior: smooth; }
+
+a { color: #007bff; }
+/* Left Sidebar (Main Nav) */
+.sidebar {
+    width: 250px;
+    height: 100vh;
+    background: #f4f4f9;
+    border-right: 1px solid #ddd;
+    padding: 20px;
+		line-height: 1.2;
+    position: fixed;
+    left: 0;
+    overflow-y: auto;
+}
+
+/* FIX: Removes the dots/bullets from the menu */
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1.5rem;
+}
+
+.sidebar li {
+    margin: 5px 0;
+}
+
+.sidebar a {
+    text-decoration: none;
+    color: #007bff;
+    font-weight: 500;
+    display: block;
+    padding: 5px 15px;
+    border-left: 3px solid transparent;
+}
+.sidebar a.active {
+    color: #333;
+    font-weight: bold;
+    border-left: 3px solid #007bff;
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+/* Right Sidebar (TOC) */
+.toc-sidebar {
+    width: 250px;
+    height: 100vh;
+    position: fixed;
+    right: 0;
+    top: 0;
+    padding: 40px 20px;
+    border-left: 1px solid #eee;
+    background: #fff;
+}
+#toc-container p { font-size: 0.7rem; font-weight: bold; color: #999; text-transform: uppercase; margin-bottom: 15px; }
+#toc-list { list-style: none; padding: 0; }
+#toc-list a { text-decoration: none; color: #666; font-size: 0.85rem; }
+
+/* Ensure content is not hidden behind the fixed sidebar */
+.content {
+    margin-left: 250px; /* Matches sidebar width */
+    margin-right: 250px; /* Matches TOC width */
+    padding: 40px 60px;
+    flex-grow: 1;
+    max-width: calc(100% - 500px); /* Prevents content from overflowing */
+		box-sizing: border-box;
+}
+
+/* Fix for Mermaid diagrams: Center them and remove code block styling */
+.mermaid {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+    background: transparent !important; /* Removes code block background */
+    border: none !important;
+}
+
+/* Prevents the original pre/code block from showing while loading */
+pre:has(.language-mermaid) {
+    display: none;
+}
+
+/* Inner code format */
+hr { border: 0; height: 1px; background: #eaecef; margin: 2rem 0; }
+:not(pre) > code {
+    background-color: #f0f0f4;
+    color: red;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+}
+
+/* --- Reduced Prism Code Font Size --- */
+pre[class*="language-"], 
+code[class*="language-"] {
+    font-size: 0.85rem !important; /* Adjust this value to your preference */
+    line-height: 1.5;
+}
+
+/* Callout Blocks */
+.callout {
+    padding: 1rem;
+    margin: 1.5rem 0;
+    border-left: 4px solid;
+    border-radius: 4px;
+    line-height: 1.5;
+    color: inherit; /* Matches default document color */
+}
+.info    { background-color: #e7f3ff; border-color: #007bff; }
+.warning { background-color: #fff3cd; border-color: #ffc107; }
+.danger  { background-color: #f8d7da; border-color: #dc3545; }
+.success { background-color: #d4edda; border-color: #28a745; }
+.note    { background-color: #f1f3f5; border-color: #adb5bd; }
+.tip     { background-color: #e0f2f1; border-color: #009688; }
+
+
+/* Tables */
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 20px 0;
+}
+
+th, td {
+    border: 1px solid #dfe2e5; /* Subtle gray border */
+    padding: 5px 12px;
+    text-align: left;
+}
+
+th {
+    background-color: #f6f8fa; /* Light gray header background */
+    font-weight: 600;
+}
+
+tr:nth-child(even) {
+    background-color: #fafbfc; /* Zebra striping for readability */
+}
+
+@media (max-width: 1100px) {
+    .toc-sidebar { display: none; }
+    .content { margin-right: 0; }
+}
