@@ -4,10 +4,10 @@ The following libraries are used: `marked` and `prism`
 
 ### Content
 
-By default, the home page is srs.md. You can change this in `script.js`:
+By default, the home page is enums_flags.md. You can change this in `script.js`:
 
 ```javascript
-const page = window.location.hash.split('/')[0].replace('#', '') || 'srs';
+const page = window.location.hash.split('/')[0].replace('#', '') || 'enums_flags';
 ```
 
 To add a new doc page, insert this line in `index.html`:
