@@ -1,5 +1,171 @@
 # Enums and Flags
 
+
+# Enums
+
+In C#, an **enum** (short for enumeration) is a value type that defines a set of named constants representing integral values. Enums are useful for creating readable, type-safe code when a variable can only take one of a predefined set of values.
+
+By convention, enum name should be in singular.
+
+### Key Points About C# Enums
+
+1. **Syntax**:
+   ```csharp
+   enum EnumName
+   {
+       Value1,  // Implicitly assigned 0
+       Value2,  // Implicitly assigned 1
+       Value3   // Implicitly assigned 2
+   }
+   ```
+
+2. **Underlying Type**:
+   - By default, enums use `int` as the underlying type, but you can specify other integral types (`byte`, `sbyte`, `short`, `ushort`, `uint`, `long`, `ulong`).
+   - Example:
+     ```csharp
+     enum Days : byte
+     {
+         Monday = 1,
+         Tuesday = 2,
+         Wednesday = 3
+     }
+     ```
+
+3. **Explicit Values**:
+   - You can assign specific values to enum members.
+   - Example:
+     ```csharp
+     enum ErrorCode
+     {
+         None = 0,
+         NotFound = 404,
+         ServerError = 500
+     }
+     ```
+
+4. **Usage**:
+   - Enums are used to improve code readability and maintainability by replacing magic numbers or strings with meaningful names.
+   - Example:
+     ```csharp
+     Days today = Days.Monday;
+     if (today == Days.Monday)
+     {
+         Console.WriteLine("It's Monday!");
+     }
+     ```
+
+5. **Enum Methods**:
+   - **ToString()**: Converts the enum value to its string representation.
+     ```csharp
+     Console.WriteLine(Days.Monday); // Outputs: Monday
+     ```
+   - **Enum.Parse()**: Converts a string to an enum value.
+     ```csharp
+     Days day = (Days)Enum.Parse(typeof(Days), "Tuesday");
+     ```
+   - **Enum.GetValues()**: Retrieves all values in the enum.
+     ```csharp
+     foreach (Days day in Enum.GetValues(typeof(Days)))
+     {
+         Console.WriteLine(day);
+     }
+     ```
+
+6. **Flags Attribute**:
+   - Use the `[Flags]` attribute to allow bitwise operations for combining enum values.
+   - Example:
+     ```csharp
+     [Flags]
+     enum Permissions
+     {
+         None = 0,
+         Read = 1,
+         Write = 2,
+         Delete = 4
+     }
+
+     Permissions userPerms = Permissions.Read | Permissions.Write;
+     Console.WriteLine(userPerms); // Outputs: Read, Write
+     ```
+
+7. **Common Practices**:
+   - Use singular names for enums (e.g., `Day` instead of `Days`) unless it’s a `[Flags]` enum, where plural is common.
+   - Define a `None` or `Unknown` value for cases where no valid option applies.
+   - Enums are often used in switch statements for clean control flow:
+     ```csharp
+     switch (today)
+     {
+         case Days.Monday:
+             Console.WriteLine("Start of the week!");
+             break;
+         default:
+             Console.WriteLine("Not Monday.");
+             break;
+     }
+     ```
+
+8. **Limitations**:
+   - Enums cannot contain methods, properties, or fields.
+   - Enums are not extensible (cannot inherit from other enums or classes).
+   - Enums are value types, so they are stored on the stack unless boxed.
+
+9. **Type Safety**:
+   - Enums prevent invalid values at compile time (e.g., you can’t assign `Days.Monday = 999`).
+   - However, casting an invalid integer to an enum is possible and may cause runtime issues:
+     ```csharp
+     Days invalid = (Days)999; // Compiles but may lead to undefined behavior
+     ```
+
+10. **Best Practices**:
+    - Use enums for fixed, well-known sets of values (e.g., days of the week, error codes).
+    - Avoid using enums for values that might change frequently or require complex logic.
+    - Consider using `Enum.IsDefined()` to validate enum values when casting from integers or strings:
+      ```csharp
+      if (Enum.IsDefined(typeof(Days), 1))
+      {
+          Days day = (Days)1;
+      }
+      ```
+
+### Example in Action
+```csharp
+using System;
+
+enum Days
+{
+    Monday = 1,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday
+}
+
+class Program
+{
+    static void Main()
+    {
+        Days today = Days.Wednesday;
+        Console.WriteLine($"Today is {today} (Value: {(int)today})"); // Outputs: Today is Wednesday (Value: 3)
+
+        // Check if value is defined
+        int input = 2;
+        if (Enum.IsDefined(typeof(Days), input))
+        {
+            Days day = (Days)input;
+            Console.WriteLine($"Day from input: {day}"); // Outputs: Day from input: Tuesday
+        }
+    }
+}
+```
+
+### When to Use Enums
+- Use enums when you have a fixed set of related constants (e.g., states, categories, or options).
+- Avoid enums for dynamic or open-ended sets of values; consider classes or structs instead.
+
+* * *
+
 # Flags
 
 In C#, the `[Flags]` attribute is used with enums to indicate that the enum values can be combined using bitwise operations, typically to represent a set of flags. Comparing bitmasks involves checking whether specific flags are set, unset, or match certain combinations using bitwise operators.
@@ -21,7 +187,7 @@ There are four ways to set the same bits of a variable:
 		Elements elements = Elements.Fire | Elements.Water; // Fire, Water
 		elements = (Elements)3;								// Fire, Water
 		elements = (Elements)(1<<0 | 1<<1);					// Fire, Water
-		elements = (Elements)0b011;						// Fire, Water
+		elements = (Elements)0b011; 						// Fire, Water
 ```
 ### Get
 
@@ -325,169 +491,4 @@ Console.WriteLine($"{element}: {Convert.ToString(element, 2).PadLeft(3, '0')}");
 ### Notes
 - The `HasFlag` method is convenient but performs a boxing operation for enums, which may impact performance in tight loops. Use bitwise operations for performance-critical code.
 - Ensure the enum is marked with `[Flags]` to enable proper string representation (e.g., `Read, Write` instead of a numeric value).
-
-# Enums
-
-In C#, an **enum** (short for enumeration) is a value type that defines a set of named constants representing integral values. Enums are useful for creating readable, type-safe code when a variable can only take one of a predefined set of values.
-
-By convention, enum name should be in singular.
-
-### Key Points About C# Enums
-
-1. **Syntax**:
-   ```csharp
-   enum EnumName
-   {
-       Value1,  // Implicitly assigned 0
-       Value2,  // Implicitly assigned 1
-       Value3   // Implicitly assigned 2
-   }
-   ```
-
-2. **Underlying Type**:
-   - By default, enums use `int` as the underlying type, but you can specify other integral types (`byte`, `sbyte`, `short`, `ushort`, `uint`, `long`, `ulong`).
-   - Example:
-     ```csharp
-     enum Days : byte
-     {
-         Monday = 1,
-         Tuesday = 2,
-         Wednesday = 3
-     }
-     ```
-
-3. **Explicit Values**:
-   - You can assign specific values to enum members.
-   - Example:
-     ```csharp
-     enum ErrorCode
-     {
-         None = 0,
-         NotFound = 404,
-         ServerError = 500
-     }
-     ```
-
-4. **Usage**:
-   - Enums are used to improve code readability and maintainability by replacing magic numbers or strings with meaningful names.
-   - Example:
-     ```csharp
-     Days today = Days.Monday;
-     if (today == Days.Monday)
-     {
-         Console.WriteLine("It's Monday!");
-     }
-     ```
-
-5. **Enum Methods**:
-   - **ToString()**: Converts the enum value to its string representation.
-     ```csharp
-     Console.WriteLine(Days.Monday); // Outputs: Monday
-     ```
-   - **Enum.Parse()**: Converts a string to an enum value.
-     ```csharp
-     Days day = (Days)Enum.Parse(typeof(Days), "Tuesday");
-     ```
-   - **Enum.GetValues()**: Retrieves all values in the enum.
-     ```csharp
-     foreach (Days day in Enum.GetValues(typeof(Days)))
-     {
-         Console.WriteLine(day);
-     }
-     ```
-
-6. **Flags Attribute**:
-   - Use the `[Flags]` attribute to allow bitwise operations for combining enum values.
-   - Example:
-     ```csharp
-     [Flags]
-     enum Permissions
-     {
-         None = 0,
-         Read = 1,
-         Write = 2,
-         Delete = 4
-     }
-
-     Permissions userPerms = Permissions.Read | Permissions.Write;
-     Console.WriteLine(userPerms); // Outputs: Read, Write
-     ```
-
-7. **Common Practices**:
-   - Use singular names for enums (e.g., `Day` instead of `Days`) unless it’s a `[Flags]` enum, where plural is common.
-   - Define a `None` or `Unknown` value for cases where no valid option applies.
-   - Enums are often used in switch statements for clean control flow:
-     ```csharp
-     switch (today)
-     {
-         case Days.Monday:
-             Console.WriteLine("Start of the week!");
-             break;
-         default:
-             Console.WriteLine("Not Monday.");
-             break;
-     }
-     ```
-
-8. **Limitations**:
-   - Enums cannot contain methods, properties, or fields.
-   - Enums are not extensible (cannot inherit from other enums or classes).
-   - Enums are value types, so they are stored on the stack unless boxed.
-
-9. **Type Safety**:
-   - Enums prevent invalid values at compile time (e.g., you can’t assign `Days.Monday = 999`).
-   - However, casting an invalid integer to an enum is possible and may cause runtime issues:
-     ```csharp
-     Days invalid = (Days)999; // Compiles but may lead to undefined behavior
-     ```
-
-10. **Best Practices**:
-    - Use enums for fixed, well-known sets of values (e.g., days of the week, error codes).
-    - Avoid using enums for values that might change frequently or require complex logic.
-    - Consider using `Enum.IsDefined()` to validate enum values when casting from integers or strings:
-      ```csharp
-      if (Enum.IsDefined(typeof(Days), 1))
-      {
-          Days day = (Days)1;
-      }
-      ```
-
-### Example in Action
-```csharp
-using System;
-
-enum Days
-{
-    Monday = 1,
-    Tuesday,
-    Wednesday,
-    Thursday,
-    Friday,
-    Saturday,
-    Sunday
-}
-
-class Program
-{
-    static void Main()
-    {
-        Days today = Days.Wednesday;
-        Console.WriteLine($"Today is {today} (Value: {(int)today})"); // Outputs: Today is Wednesday (Value: 3)
-
-        // Check if value is defined
-        int input = 2;
-        if (Enum.IsDefined(typeof(Days), input))
-        {
-            Days day = (Days)input;
-            Console.WriteLine($"Day from input: {day}"); // Outputs: Day from input: Tuesday
-        }
-    }
-}
-```
-
-### When to Use Enums
-- Use enums when you have a fixed set of related constants (e.g., states, categories, or options).
-- Avoid enums for dynamic or open-ended sets of values; consider classes or structs instead.
-
-
 
