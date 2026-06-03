@@ -62,7 +62,7 @@ When a system loops over an array of pure structs, the CPU's prefetcher loads an
 
 ---
 
-# Best Design Patterns for True High-Performance ECS
+# Design Patterns for True High-Performance ECS
 
 Traditional design patterns often depend heavily on class inheritance and virtual method tables (VMTs), which disrupt linear cache-line streaming. To maintain performance, design patterns must be re-engineered around pure value types, reference passing, and unmanaged collections.
 
