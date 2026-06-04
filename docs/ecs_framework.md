@@ -1,4 +1,4 @@
-# Entity Component System (ECS) Architecture
+# Entity Component System Framework
 
 Entity Component System (ECS) is a software architectural pattern used primarily in game development to store and iterate over high-volume game data. Unlike traditional Object-Oriented Programming (OOP) which relies on deep class inheritance and binds data and logic together, ECS favors **pure data composition** and segregates data cleanly from execution logic.
 
@@ -181,3 +181,77 @@ public class CentralMessageMediator
 | **Memory Allocation** | Objects scattered across the Managed Heap. | Contiguous components packed inside sequential arrays. |
 | **Logic Processing** | Virtual method routines inside separate objects. | Parallel loops updating value arrays via systems. |
 | **State Alteration** | Complex conditional trees or structural class switches. | Dynamic insertion/removal of structural Tag components. |
+
+* * *
+
+# Dynamic Modifiers
+
+To handle items that change attributes when being weared, you need to extend your EntityRegistry and EntitySieve to support dynamic modifiers.
+
+Currently, your CharacterStats is a fixed struct, and your Controller only performs a one-time calculation based on Race/Class. To support equipment, you must implement a system that layers modifiers on top of those base stats.
+
+
+### 1. Update the Data Layer: `Core/EntitySieve.cs`
+
+You need a place to store "Bonus" stats so that the original `CharacterStats` remains untouched.
+
+```csharp
+public struct CharacterStats
+{
+    public int Strength;
+    public int Intelligence;
+    // ... other stats
+    
+    // Add a method to calculate the final value including gear
+    public int GetStrength(int gearBonus) => Strength + gearBonus;
+}
+
+```
+
+### 2. Update the Registry: `Core/EntityRegistry.cs`
+
+You need to store the equipped items so the system knows which bonuses to apply.
+
+```csharp
+public class EntityRegistry
+{
+    private Dictionary<int, List<int>> _equippedItems = new();
+
+    public void EquipItem(int entityId, int itemId)
+    {
+        if (!_equippedItems.ContainsKey(entityId)) _equippedItems[entityId] = new List<int>();
+        _equippedItems[entityId].Add(itemId);
+    }
+
+    public int GetTotalStrengthBonus(int entityId)
+    {
+        int bonus = 0;
+        // In a real system, you would look up item IDs in accessories.json
+        // and sum the 'GearStrengthBonus' property
+        if (_equippedItems.TryGetValue(entityId, out var items))
+        {
+            foreach(var itemId in items) 
+            {
+                if(itemId == 501) bonus += 5; // Hardcoded lookup for Ring of Giant Strength
+            }
+        }
+        return bonus;
+    }
+}
+
+```
+
+### 3. The Logic Flow
+
+When the NPC wears the Ring:
+
+1. **Tagging**: The `EntityRegistry` should add a `WeaponComponent` (or `EquipmentComponent`) to the entity in the `TagGrid`.
+2. **Calculation**: Your `ProcessCombat` system calls `GetTotalStrengthBonus(entityId)`.
+3. **Formula Processing**: The `FormulaProcessor` receives the sum of Base + Gear Strength and computes the final damage.
+
+### What you need to do next:
+
+* **Item Database**: Create a `Dictionary<int, AccessoryData>` in your `Controller` (similar to how you handle `_races`) to load `accessories.json` into memory.
+* **System Update**: Your combat logic should not just read `stats.Strength`. It should read `stats.Strength + registry.GetTotalStrengthBonus(entityId)`.
+
+By following this "Modifier" pattern, you keep your `CharacterStats` struct clean while allowing for infinitely scalable gear systems. Does this approach of layering bonuses on top of the base stats align with how you want to handle gear?
