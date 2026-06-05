@@ -2,7 +2,7 @@
 
 # Architectural Overview
 
-In modern high-performance application development, especially within real-time simulation and game engines ,traditional architectural patterns like Object-Oriented Programming (OOP) often hit a hard performance ceiling. This ceiling isn't a limitation of software logic; it is a physical consequence of how modern hardware interacts with data.
+In modern high-performance application development, especially within real-time simulation and game engines, traditional architectural patterns like Object-Oriented Programming (OOP) often hit a hard performance ceiling. This ceiling isn't a limitation of software logic; it is a physical consequence of how modern hardware interacts with data.
 
 **Data-Oriented Design (DoD)** and its structural execution framework, the **Entity Component System (ECS)** pattern, shift the primary focus of programming away from conceptual mental hierarchies (Classes and Objects) to the physical constraints of computing hardware (CPU Caches and Contiguous Memory Layouts).
 
