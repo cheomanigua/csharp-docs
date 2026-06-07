@@ -284,3 +284,129 @@ If you are worried about the "cost" of the Dictionary/Reflection approach, this 
 If your game is not currently lagging, stick with the **Reflection-Caching** you have now. It already gives you the "one source of truth" (JSON) and "blazing speed" (cached access). Only move to Code Generation if you find that the few nanoseconds lost in Dictionary lookups are causing a performance bottleneck in your hot loop.
 
 Does knowing that you are currently at "99% speed" make you feel better about staying with the current approach, or does the idea of "100% speed" via code generation appeal to your need for perfection?
+
+* * *
+
+### 3. Layered Architecture
+
+You have built a system that uses **multiple patterns at different levels**. Here is your current stack:
+
+1. **Bottom Layer (Memory Layout): Contiguous Arrays**
+* *Why?* To give the CPU cache-friendly data.
+* *Status:* You are using arrays internally within your Registries.
+
+
+2. **Middle Layer (Management): Registry Pattern (ECS style)**
+* *Why?* To abstract the array indices and handle lifecycle management (add/remove entities).
+* *Status:* This is your `EntityRegistry` and `MetadataRegistry`.
+
+
+3. **Top Layer (Communication): Adapter/DTO Pattern**
+* *Why?* To decouple your high-performance memory layout from your UI.
+* *Status:* This is your `CharacterViewAdapter` and `CharacterSheetDto`.
+
+* * *
+
+# Calculations
+
+Calculations can be performed either directly in the Registry code base or using Formulas.
+
+You have hit on the core challenge of balancing **Data-Oriented Design (DOD)** with **flexibility**. To answer your question: **Yes, the goal of DOD is to move logic into data, but you must choose the right "level" of data-driven abstraction.**
+
+Here is the assessment of your current architecture and the best path forward to achieve that "pure" data-driven state.
+
+### 1. The Architectural Assessment
+
+Currently, you have a split:
+
+* **Initialization** is strictly data-driven via `FormulaProcessor`.
+* **Combat Modifiers** (equipment/items) are currently "hard-coded" in `EntityRegistry.cs` using loops.
+
+Moving the modifier logic into `FormulaProcessor` is the "pure" DOD way, but it introduces a **performance vs. complexity trade-off**.
+
+### 2. The Path to "Pure" Data-Driven Modifiers
+
+If you want to move the equipment modifier logic into `formulas.json`, you would need to change `FormulaProcessor` to handle **arbitrary lookups**. Currently, your formula processor expects a `CharacterStats` struct. To make equipment data-driven, you would need to add a "Modifier" formula type.
+
+**Example of how to evolve your `formulas.json`:**
+
+```json
+"ItemModifiers": {
+  "Operations": [
+    { "Type": "Add", "Target": "Strength", "Source": "ItemStrengthBonus" }
+  ]
+}
+
+```
+
+### 3. Should you change it?
+
+While making everything data-driven is elegant, **hard-coding basic additive modifiers (like gear stats) is often preferred in ECS/DOD** for two reasons:
+
+* **Performance**: Iterating through a list of component modifiers (`stat.Strength += mod.Value`) as you are doing now is $O(N)$ and extremely cache-friendly. Calling into a `FormulaProcessor` for every single piece of gear adds overhead (reflection, dictionary lookups, or delegate invocations).
+* **Complexity**: If every piece of gear requires a `FormulaDto` entry in your JSON, your JSON will become massive and difficult to debug compared to simple component tags.
+
+### 4. Recommendation: The Hybrid Approach
+
+To keep your system clean, high-performance, and "DOD-aligned," I recommend this division of labor:
+
+| Logic Type | Location | Why? |
+| --- | --- | --- |
+| **Base Stat Generation** | `FormulaProcessor` | Complex logic (Class/Race) is best handled by formula definitions. |
+| **Advanced Skill/Combat Scaling** | `FormulaProcessor` | Complex, multi-stat interactions (Melee/Ranged/Spell) are best kept in JSON to allow for game balance tuning without re-compiling. |
+| **Simple Additive Modifiers** | `EntityRegistry` | High-frequency, simple math (gear) is best handled by direct memory manipulation (DOD). |
+
+### Summary
+
+You are not "failing" DOD by hard-coding the item modifier loop. In fact, **direct memory modification of your `stats` struct within the `EntityRegistry` is the most DOD-compliant way to handle high-frequency additive modifiers.**
+
+If you move the modifier loop into the `FormulaProcessor`, you will likely be doing unnecessary work (lookup overhead) for a simple addition. Your current implementation of `ProcessCombat` in `EntityRegistry` is efficient because it respects the structure of your data.
+
+**If you find yourself needing "Conditional Modifiers" (e.g., "Add 5 strength IF health < 50%"), then you should move that specific logic into the `FormulaProcessor`.** For simple item stats, stick to your current approach.
+
+## When to use each
+
+Depending on the frequency of the calculations, one should be used directly in the Registry codebase, or using Formulas. The impact on performance depends on *when* they execute and *how often* they access memory.
+
+
+### 1. Base Stat Generation (Lowest Frequency)
+
+**This is low frequency.**
+
+* **Why:** This happens **exactly once**—the moment a character is born, spawned, or levels up.
+* **The DOD Constraint:** Because it happens once, you don't care about CPU cycles. You *want* it to be data-driven. Using `FormulaProcessor` here allows you to change the entire balance of your game (e.g., "Mages now get +10 Intelligence instead of +5") by editing a JSON file without ever recompiling your code.
+
+### 2. Advanced Skill/Combat Scaling (Medium Frequency)
+
+**These are medium frequency.**
+
+* **Why:** These execute only when a specific action occurs (e.g., a "MeleeStrike" happens). You are not calculating the Melee Strike damage for 500 NPCs every frame; you are only calculating it when an NPC decides to attack.
+* **The DOD Constraint:** You have the "luxury" of being data-driven here because the frequency is controlled by game events rather than the engine tick.
+
+### 3. Simple Additive Modifiers (Highest Frequency)
+
+**These are the highest frequency.**
+
+* **Why:** In an ECS, `ProcessCombat` (or a similar system) often runs every single frame or every time a combat-related state changes. If you have 500 NPCs, you are iterating through every piece of gear on every NPC, every update.
+* **The DOD Constraint:** Because this happens thousands of times per second, the logic must be "tight." If you have to jump into a `FormulaProcessor`—which involves dictionary lookups, potential reflection (to find property names), or parsing JSON—you will kill your performance. Direct struct modification (`stat.Strength += 5`) is effectively free at the CPU level.
+### Visualization of Execution Frequency
+
+### Summary: Why the distinction matters
+
+* **Simple Modifiers (Gear):** Are **Data-Driven by Structure**. You don't need a formula to add 5 to 7; the structure of the data (the list of modifiers on the item) *is* the logic.
+* **Advanced Scaling (Skills):** Are **Data-Driven by Definition**. Because the math is complex, you need an engine (`FormulaProcessor`) to interpret the rules.
+
+**The Golden Rule for your ECS:**
+If you can express the change as a simple arithmetic operation (add, subtract), **do it in the registry**. If you have to look up multiple stats, use multipliers, or create conditional logic (e.g., "if strength > 10 then multiply by 1.5"), **use the `FormulaProcessor**`.
+
+You are currently handling your gear exactly as you should for a high-performance system. Does that help clarify why you don't need to "over-engineer" the simple gear additions?
+
+## Which files
+
+Below is a list of the files involved in each calculation:
+
+**Base Stat Generation:** `FormulaProcessor.cs`, `formulas.json`, `StatInitializationSystem.cs`, `EntityRegistry.cs`
+
+**Advanced Skill/Combat Scaling:** `FormulaProcessor.cs`, `formulas.json`
+
+**Simple Additive Modifiers:** `EntityRegistry.cs`, `EquipmentSystem.cs`

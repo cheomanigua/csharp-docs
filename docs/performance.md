@@ -10,7 +10,7 @@ Here is how the concepts we established make handling 5,000 highly flexible, JSO
 
 
 
-### 1. Simple Stream Operations: Movement and Attacks ($O(N)$)
+### 1. Simple Stream Operations: Movement and Attacks (O(N))
 
 When 5,000 entities move or check if they can attack, they don't look up heavy scripts.
 
@@ -19,7 +19,7 @@ When 5,000 entities move or check if they can attack, they don't look up heavy s
 
 
 
-### 2. Status Effects and Skills: The Filter Advantage ($O(K)$ where $K \ll N$)
+### 2. Status Effects and Skills: The Filter Advantage (O(K) where K \ll N)
 
 Suppose a designer edits `spells.json` to introduce a new "Frozen" spell. Out of 5,000 active entities, perhaps only 40 are currently frozen.
 
@@ -59,13 +59,13 @@ On a standard desktop processor, your frame budget for 5,000 completely customiz
 
 | Simulation Subroutine | Complexity | Estimated CPU Time | Underlying Paradigm Engine Tool |
 | --- | --- | --- | --- |
-| **1. Dynamic Pipeline Sorting** | $O(1)$ | ~0.02 ms | **Systems Pipeline Manifest** loads and orders systems from text. |
-| **2. Spatial Grid Registration** | $O(N)$ | ~0.25 ms | Maps 5,000 active entity coordinates into a fast grid layout. |
-| **3. Proximity Target Scanning** | $O(N \log N)$ | ~0.50 ms | Filters local targets using neighborhood grid indices. |
-| **4. Combat Formula Evaluation** | $O(K)$ | ~0.30 ms | Evaluates tokenized mathematical strings for active combat targets. |
+| **1. Dynamic Pipeline Sorting** | O(1) | ~0.02 ms | **Systems Pipeline Manifest** loads and orders systems from text. |
+| **2. Spatial Grid Registration** | O(N) | ~0.25 ms | Maps 5,000 active entity coordinates into a fast grid layout. |
+| **3. Proximity Target Scanning** | O(N log N) | ~0.50 ms | Filters local targets using neighborhood grid indices. |
+| **4. Combat Formula Evaluation** | O(K) | ~0.30 ms | Evaluates tokenized mathematical strings for active combat targets. |
 | **5. Time-Sliced Pathfinding** | Constant | ~2.00 ms | Processes a capped queue of path navigation targets via the **Command Buffer**. |
-| **6. Linear Physics/Movement** | $O(N)$ | ~0.05 ms | Processes position updates linearly across flat data pools. |
-| **7. Deferred Lifecycle Flush** | $O(C)$ | ~0.15 ms | Resolves entity creations/deletions from the buffer between frame ticks. |
+| **6. Linear Physics/Movement** | O(N) | ~0.05 ms | Processes position updates linearly across flat data pools. |
+| **7. Deferred Lifecycle Flush** | O(C) | ~0.15 ms | Resolves entity creations/deletions from the buffer between frame ticks. |
 | **Total Engine Simulation Cost** | — | **~3.27 ms** | **Uses only ~9.8% of a 33.33ms (30Hz) frame window.** |
 
 ### The Verdict
