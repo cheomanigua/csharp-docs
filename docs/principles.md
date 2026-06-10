@@ -27,19 +27,41 @@ The engine operates on a decoupled architecture where data definitions, logic pr
 
 ## 2. Structural Patterns
 
-### The Registry Pattern (ECS Foundation)
+### 2.1. The Registry Pattern (ECS Foundation)
 
 We use the **Registry Pattern** to manage the entity lifecycle. It abstracts away memory management, providing a stable interface for systems to query entities.
 
-### Flat Array + Index Map (Data-Driven Schema)
+### 2.2. Flat Array + Index Map (Data-Driven Schema)
 
 This is the heart of your engine’s flexibility. Instead of hardcoding properties like `Strength` or `Intelligence` into your structs (which requires a recompile to change), we use a **Flat Array + Index Map** strategy.
 
-* **Flat Array**: Your `CharacterStats` component contains a single, contiguous array: `int[] Values`.
-* **Index Map (`StatRegistry`)**: At startup, the `StatRegistry` parses `StatsDefinition.json` to create a map of `string` names to `int` indices (e.g., "Strength" → `0`, "Intelligence" → `1`).
-* **Dynamic Access**: Systems and the View layer look up the index via `StatRegistry` and access the `Values` array at that index. This allows you to add stats (e.g., "Dexterity") purely by modifying JSON, with zero changes to core C# classes.
+This strategy balances high-performance memory layout with data access needs. It uses a **Flat Array** for storage and an **Index Map** to handle the translation between "Identity" and "Memory Offset."
 
-### The Adapter/DTO Pattern (Decoupling)
+* **Flat Array**: It is your memory strategy (how you store the data). Your `CharacterStats` component stores data in a contiguous `int[] Values` array, ensuring CPU cache-friendly access.
+* **Index Map**: It is your access strategy (how you retrieve the data). This translates a Stat's identity (Name or Type) into a fixed array index. There are two primary strategies for this map:
+    * **String-Based Map (Dynamic)**: Indices are determined at runtime by parsing a `StatsDefinition.json`. This offers maximum flexibility (add stats without recompiling) but introduces slight runtime overhead for lookups.
+    * **Enum-Based Map (Static/Performant)**: Indices are defined by a compile-time `enum`. This offers the highest possible performance (zero-cost array access) and compile-time safety, at the cost of requiring a recompile if the stat schema changes.
+
+    #### Dynamic Access vs. Direct Access
+    * Systems using **String-Based Maps** query the `StatRegistry` at runtime to find the index.
+    * Systems using **Enum-Based Maps** cast the `enum` directly to an `int` for instant, raw-array access.
+
+    Using `enums` instead of `strings` just makes your **Index Map** more efficient, safer, and faster.
+
+    #### The Comparison
+
+    | Feature | String-Based Map | Enum-Based Map |
+    | --- | --- | --- |
+    | **Storage** | Flat Array (`int[]`) | Flat Array (`int[]`) |
+    | **Index Access** | `_map["Strength"]` | `(int)StatType.Strength` |
+    | **Performance** | O(1) with overhead (hashing/checks) | **O(1) raw CPU offset (zero overhead)** |
+    | **Safety** | Runtime (risky) | **Compile-time (guaranteed)** |
+
+#### Why it remains the same pattern:
+
+You are still using an array for storage (`Values[]`), and you are still using a predefined key (`StatType`) to determine which slot in the array to access. You aren't changing the architecture; you are just upgrading the "Key" from a slow, error-prone string to a fast, type-safe integer.
+
+### 2.3. The Adapter/DTO Pattern (Decoupling)
 
 To prevent the high-performance `EntityRegistry` from being tightly coupled to UI, we use **Adapters**:
 
