@@ -2,12 +2,6 @@
 
 To integrate your **Flat Array + Index Map** approach into the documentation, we need to clarify that this is the final layer of your optimization strategy. It replaces the old "hardcoded field" approach (e.g., `stats.Health`) with a data-driven "Index Map" (e.g., `stats.Values[idx]`).
 
-Here is your fully refactored `principles.md` incorporating this pattern.
-
----
-
-# Core Principles of DoD
-
 This documentation serves as your technical reference for the **System-Based Command Pipeline**, **Registry Pattern**, and **Flat Array + Index Map** architecture.
 
 ---
@@ -54,8 +48,8 @@ This strategy balances high-performance memory layout with data access needs. It
     | --- | --- | --- |
     | **Storage** | Flat Array (`int[]`) | Flat Array (`int[]`) |
     | **Index Access** | `_map["Strength"]` | `(int)StatType.Strength` |
-    | **Performance** | O(1) with overhead (hashing/checks) | **O(1) raw CPU offset (zero overhead)** |
-    | **Safety** | Runtime (risky) | **Compile-time (guaranteed)** |
+    | **Performance** | O(1) with overhead (hashing/checks) | O(1) raw CPU offset (zero overhead) |
+    | **Safety** | Runtime (risky) | Compile-time (guaranteed) |
 
 #### Why it remains the same pattern:
 
