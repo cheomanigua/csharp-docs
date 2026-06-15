@@ -101,7 +101,7 @@ Implementation of traditional patterns is adapted for the DoD paradigm:
 * **Observer:** Implemented via **"Dirty Flags."** Rather than complex event chains, systems check primitive `IsDirty` flags to trigger updates, maintaining $O(1)$ performance.
 * **Factory:** Creates **Entity IDs** and attaches data, rather than instantiating class objects.
 
-## 5. Performance vs. Flexibility Summary
+## 5. Performance vs. Flexibility
 
 | Layer | Function | Performance Impact |
 | --- | --- | --- |
@@ -119,3 +119,19 @@ To scale entity attributes (e.g., equipment bonuses), the framework separates ba
 3. **Calculation:** The `FormulaProcessor` sums base stats + gear bonuses only when the `IsDirty` flag is set, ensuring that heavy math is not performed every frame.
 
 By strictly separating the *Human Taxonomy* (JSON blueprints and names) from the *Machine Execution* (flat memory arrays and system-based logic), this architecture achieves both design-time modularity and run-time hardware efficiency.
+
+# Summary
+
+* **Core Philosophy:** You are leveraging **Data-Oriented Design (DoD)** to prioritize hardware efficiency, using **ECS (Entity Component System)** to ensure cache locality by separating logic (Systems) from state (Components).
+* **Data-Driven Workflow:** You have externalized configuration into JSON (blueprints for races, classes, weapons) and are using a `FormulaProcessor` to resolve attributes at runtime without hardcoding, facilitating rapid balancing and moddability.
+* **Performance Optimization:** You are using packed, blittable structs and `IsDirty` flags to avoid unnecessary computation, only processing updates when state changes occur.
+* **Event Handling:** You have a clean, performance-oriented event pipeline that separates **persistent state** (`IsDirty` flags) from **transient/one-shot feedback** (Reactive Event Buffers) and **system routing** (Delegate Registries).
+* **Design Patterns:** You are applying GoF patterns like *Strategy*, *Command*, *Flyweight*, and *Factory* through a data-oriented lens to keep the engine performant while maintaining modularity.
+
+## Files
+
+* **Initialization Flow:** `Program.cs` bootstraps the `EngineDriver`, which coordinates the `Controller` (data loader) and the `Registry` (memory storage).
+* **Data Structure:** You are using high-performance, contiguous memory layouts (`EntityHotData` as a `struct` with `fixed` buffers) to ensure cache locality, aligned with your Data-Oriented Design goals.
+* **Systems Integration:** Your `EngineDriver` acts as the orchestrator, routing `GameCommand` objects through a `CommandQueue` to specialized systems (`StatInitializationSystem`, `EquipmentSystem`, `RenderSystem`).
+* **Formula Logic:** The `FormulaProcessor` acts as the agnostic bridge between your static JSON definitions and the live `EntityHotData`, allowing for dynamic stat scaling without recompilation.
+

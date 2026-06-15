@@ -4,6 +4,10 @@
 
 In high-performance C# (e.g., game engines, ECS), we categorize data based on how it interacts with memory and the Garbage Collector (GC).
 
+To integrate the **Command Queue** concept into your "Key Concepts" guide, you should define it as the transactional mechanism that protects these packed memory structures from concurrent access.
+
+Here is the updated section:
+
 ## 1. Key Concepts Explained
 
 ### Packed and Blittable
@@ -25,14 +29,21 @@ These are types that the .NET Garbage Collector (GC) must track.
 * **Examples:** `string`, `class`, `List<T>`, `object`.
 * **Implication:** Because the GC needs to know where these are, you cannot put them in a memory-aligned "packed" struct or an `unsafe` block, as their location in memory might change (when the GC moves objects).
 
+### Transactional Intent (Command Queue)
+
+* **The Concept:** A sequential buffer of transactional "intent" objects that decouples the *request* for a state change from its *execution*.
+* **Why it matters for Performance:** In an ECS, you never want logic systems to mutate packed memory buffers directly, as this causes cache thrashing and race conditions. By enqueuing a `GameCommand` struct, you store the *intent* to change data in a cache-friendly queue, allowing the `EngineDriver` to batch these mutations safely during a single, deterministic window in the frame tick.
+
 ### Data Categories
 
 * **Logic/Metadata:** Data containing `string`, `class`, or `List`. It is managed and safe. It should not be forced into manual memory layouts.
 * **Packed Structs:** Structs using `LayoutKind.Explicit` or `Sequential` designed for high-density, cache-friendly storage.
-    * `[StructLayout(LayoutKind.Sequential)]` ensures fields appear in memory in order.
-    * `[StructLayout(LayoutKind.Explicit)]` allows precise control using `[FieldOffset]`.
-* **Performance Buffers:** Structs containing `fixed` buffers used for high-frequency operations (like combat math). These require the `unsafe` keyword.
+* `[StructLayout(LayoutKind.Sequential)]` ensures fields appear in memory in order.
+* `[StructLayout(LayoutKind.Explicit)]` allows precise control using `[FieldOffset]`.
 
+
+* **Performance Buffers:** Structs containing `fixed` buffers used for high-frequency operations (like combat math). These require the `unsafe` keyword.
+* **Command Buffers:** Blittable structs stored in a contiguous `Queue<T>` that act as the single point of entry for state mutation, ensuring all memory modifications remain predictable and deterministic.
 
 
 ## 2. Decision Matrix
@@ -43,7 +54,15 @@ These are types that the .NET Garbage Collector (GC) must track.
 | **Sequential** | General packing | `LayoutKind.Sequential` | High | Compiler-Managed ordered | Medium |
 | **Explicit (Packed)** | Blittable / Tightly packed structs | `LayoutKind.Explicit`, `[FieldOffset]` | High | Manual Offsets `[FieldOffset]` | Medium |
 | **Unsafe (Fixed)** | Performance Buffers/Pointers | `unsafe`, `fixed` | Low (Manual) | Manual Memory | High |
+| **Command Queue** | Transactional State Changes | `Queue<T>`, `struct` | High | Transactional | Low |
 
+### Why the Command Queue is different:
+
+Unlike the memory-layout strategies (Sequential, Explicit, Unsafe) which focus on **how data is stored**, the **Command Queue** focuses on **how data is modified**. It provides a "Gatekeeper" pattern where:
+
+1. **Systems** enqueue *intent* as lightweight, blittable structs.
+2. The **EngineDriver** processes these structs sequentially as a batch transaction.
+3. **Performance** remains high because the mutation occurs in a single, predictable loop, preventing cache invalidation and race conditions during your high-speed system sweeps.
 
 
 ## 3. Implementation Patterns
@@ -101,6 +120,40 @@ public unsafe struct EntityHotData {
 
 ```
 
+### Pattern 5: The "Transactional Intent" (Command Queue)
+
+Use this to decouple systems that *request* a state change from the systems that *process* it. By defining intents as simple, blittable structs, you can safely queue them to be processed by the engine’s `Tick` logic, ensuring thread safety and deterministic order without heap allocations.
+
+```csharp
+// Define the intent as a lightweight, blittable struct
+public enum CommandType { EquipItem, AdjustHealth, SpawnEntity }
+
+[StructLayout(LayoutKind.Sequential)]
+public struct GameCommand {
+    public CommandType Type;
+    public int EntityId;
+    public int Value;
+}
+
+// In the EngineDriver, process these transactions as a batch
+public class CommandQueue {
+    private readonly Queue<GameCommand> _queue = new();
+    
+    public void Enqueue(GameCommand cmd) => _queue.Enqueue(cmd);
+    public bool HasCommands => _queue.Count > 0;
+    public GameCommand Dequeue() => _queue.Dequeue();
+}
+
+```
+
+#### Why this pattern is essential for performance
+
+Unlike the other patterns that focus on **how memory is packed for reading**, the **Command Queue** pattern focuses on **how memory is modified for safety**.
+
+* **Prevents Race Conditions:** By queueing intents, you ensure that no system is writing to `EntityHotData` while another system is midway through a `Span<T>` sweep.
+* **Batch Consistency:** All mutations are executed in a single, predictable loop during the `EngineDriver.Tick()`. This keeps the CPU cache consistent because the memory state only changes during a specific, known window of time.
+* **Deterministic Replay:** Because your commands are now serialized in a queue, you can log every `GameCommand` to a file. This allows you to recreate any game state or debug complex combat interactions simply by "replaying" the command sequence.
+
 ## 4. Garbage Collection
 
 To understand which strategies use Garbage Collection (GC), it is helpful to look at whether the memory is "Managed" (handled by the CLR) or "Unmanaged" (handled by you).
@@ -110,9 +163,10 @@ To understand which strategies use Garbage Collection (GC), it is helpful to loo
 | Strategy | Uses Garbage Collection? | Explanation |
 | --- | --- | --- |
 | **Standard (Safe)** | **Yes** | Uses managed types (like `string` or `List`) that the GC must track and clean up. |
-| **Sequential** | **Generally No** | If it contains only "blittable" types (int, float), the GC ignores the struct's *contents* and only tracks the object containing the struct. |
-| **Explicit (Packed)** | **No** | Typically used for blittable data. The GC does not track the internal fields; it treats the struct as a raw block of memory. |
-| **Unsafe (Fixed)** | **No** | You are directly managing this memory. The GC does not track or clean up `fixed` buffers or pointers. |
+| **Sequential** | **Generally No** | GC ignores contents if types are blittable. |
+| **Explicit (Packed)** | **No** | Treated as raw memory blocks. |
+| **Unsafe (Fixed)** | **No** | Memory is managed manually. |
+| **Command Queue** | **No** | Uses blittable structs; zero heap allocation during execution. |
 
 ### Detailed Breakdown
 
@@ -133,6 +187,13 @@ When you use `unsafe` and `fixed` buffers (like in your `EntityHotData`), you ar
 
 * The GC does not track the content of `fixed` arrays.
 * **Critical Warning:** Because the GC is not tracking this, you must ensure that your `unsafe` code does not access memory that has been deallocated or is being reused. You are essentially stepping outside the "safety net" that the GC provides.
+
+#### 4. Command Queue — **GC-Ignored (if Blittable)**
+
+By defining your `GameCommand` as a `struct` consisting only of blittable types (e.g., `enum`, `int`), you ensure that enqueuing and dequeuing operations create **zero garbage**.
+
+* **Performance:** Because the queue stores structs contiguously, the CPU can iterate through pending commands without triggering cache misses or forcing the GC to perform "Mark and Sweep" cycles on the intent list.
+* **Why it matters:** In a high-performance ECS, you want your state mutations to be as "silent" to the GC as your component updates. Using a struct-based `CommandQueue` ensures that even during high-frequency combat or intense state changes, the memory footprint remains perfectly flat and predictable.
 
 ### Why this matters for your ECS
 

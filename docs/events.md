@@ -152,76 +152,44 @@ namespace Game.Ai
 
 ```
 
-## The Combined Engine Loop Lifecycle
 
-To see how these 3 systems mesh together without fighting, look at the sequence of a single live game loop frame processing inside **Godot's presentation ecosystem**:
+## 4. The Command-Driven Queue (For Transactional State Mutations)
+
+* **The Concept:** A sequential buffer of transactional "intent" objects that decouple the *request* for a state change from its *execution*.
+* **Best Used For:** High-stakes logical state changes that require strict ordering and safety (e.g., equipping an item, leveling up a stat, or spawning a new NPC).
+* **The Workflow:** Instead of systems calling each other directly (creating "spaghetti" dependencies), they drop a `GameCommand` struct into the `EngineDriver`'s queue. At the beginning of the next `Tick`, the engine drains the queue sequentially, ensuring all state mutations are processed in a controlled, predictable order before the movement or rendering systems run.
+
+```mermaid
+graph LR
+    SystemA[Equipment UI] -->|1. Enqueue| Queue[Command Queue]
+    SystemB[Quest System] -->|1. Enqueue| Queue
+    Queue -->|2. Sequential Process| Engine[Engine Driver Tick]
+    Engine -->|3. Update Registry| Registry[Entity Registry]
+
+```
+
+#### C# Implementation
 
 ```csharp
-using Godot;
-using System;
-using Game.Model;
-using Game.Events;
-using Game.Ai;
-
-public partial class GameViewFrameDriver : Node2D
+namespace Game.Commands
 {
-    private HealthRegistry _registry;
-    private CombatSystem _combatSystem;
-    private AiRoutineSystem _aiSystem;
+    public enum CommandType { EquipItem, UpdateStats, SpawnEntity }
 
-    public override void _Ready()
+    // Sequential transaction request
+    public struct GameCommand
     {
-        // 1. Boot up pure decoupled C# backend architecture structures
-        _registry = new HealthRegistry();
-        _combatSystem = new CombatSystem();
-        _aiSystem = new AiRoutineSystem(_registry);
+        public CommandType Type;
+        public int EntityId;
+        public int TargetId; // Used for item IDs or secondary targets
     }
 
-    // RUNS CONTINUOUSLY EVERY FRAME
-    public override void _Process(double delta)
+    public class CommandQueue
     {
-        // STEP A: RUN CONTROLLER SIMULATION LOGIC
-        // Let's pretend an enemy script commands Entity 42 to use its AI routine
-        _aiSystem.ExecuteAction("GoToSleep", 42); 
-
-        // Let's pretend an event causes player combat damage to land this frame
-        ref var playerHealth = ref _registry.GetModifiable(0);
-        _combatSystem.ApplyStrike(ref playerHealth, 15);
-
-
-        // STEP B: CONSUME TRANSIENT EVENT BUFFERS (JUICE & SPECIAL FX)
-        ReadOnlySpan<VisualDamageEvent> events = _combatSystem.FrameEvents.ToArray();
-        for (int i = 0; i < events.Length; i++)
-        {
-            in var evt = ref events[i];
-            
-            // Triggers immediate, volatile, frame-bound feedback outputs safely
-            SpawnFloatingCombatText(evt.TargetEntityId, $"-{evt.DamageAmount} HP");
-            PlaySoundEffect("res://audio/hit.wav");
-        }
-        _combatSystem.FrameEvents.Clear(); // Flush transient buffers to zero footprint!
-
-
-        // STEP C: POLL PERSISTENT STATE DATA (UI SYNCHRONIZATION)
-        Span<HealthComponent> healthComponents = _registry.GetSpan();
-        for (int i = 0; i < healthComponents.Length; i++)
-        {
-            ref var health = ref healthComponents[i];
-            
-            // Fast branchless skip: The CPU sweeps by unchanged units instantly!
-            if (!health.IsDirty) 
-                continue;
-
-            // Heavy UI modifications fire ONLY for modified data states
-            Label hpLabel = GetNode<Label>($"UI/Unit_{health.EntityId}/HpText");
-            hpLabel.Text = $"HP: {health.CurrentHp}";
-
-            health.IsDirty = false; // Reset the persistent tracker flag
-        }
+        private readonly Queue<GameCommand> _commands = new();
+        public bool HasCommands => _commands.Count > 0;
+        public void Enqueue(GameCommand cmd) => _commands.Enqueue(cmd);
+        public GameCommand Dequeue() => _commands.Dequeue();
     }
-
-    private void SpawnFloatingCombatText(int id, string text) { /* Godot visual node pop */ }
-    private void PlaySoundEffect(string path) { /* Godot audio element */ }
 }
 
 ```
@@ -233,10 +201,11 @@ public partial class GameViewFrameDriver : Node2D
 | **1. `IsDirty` Flags** | Syncing permanent UI text displays, map coordinates, and persistent graphics nodes. | Packed inside the component data struct array layout. | **Persistent** (Lives until entity is removed). |
 | **2. Reactive Buffers** | Triggering temporal audio assets, particle emissions, screen shake, and floating text pops. | Pre-allocated global context frame lists. | **Transient** (Wiped clean at the end of each frame). |
 | **3. Delegate Tables** | Directing action strings from `definitions.json` directly to high-speed logic methods. | Immutably stored inside the System Bootstrapper context registry. | **Static** (Set once at engine initialization). |
+| **4. Command Queues** | Mediating state changes (Equip, Stats, Spawn). | Sequential Queue of structs/commands in `EngineDriver`. | **Frame-Bound** (Processed and cleared every tick). |
 
 ## When to use each one
 
-Here is an extended, practical production guide detailing exactly when to deploy each of the three ECS event pipelines during game development.
+Here is an extended, practical production guide detailing exactly when to deploy each of the four ECS event pipelines during game development.
 
 ### 1. When to Use: `IsDirty` Bitmask Flags
 
@@ -307,36 +276,59 @@ Here is an extended, practical production guide detailing exactly when to deploy
 **Console Commands & Cheat Intakes:**
 * Binding terminal text inputs parsed from an in-game developer debug console (e.g., `/godmode`, `/spawn_enemy`, `/noclip`) directly to internal management routines.
 
+### 4. When to Use: Command-Driven Queue
 
+**Rule of Thumb:** Use this when you need to perform an operation that modifies the engine's core state (e.g., entity registration, stat recalculation, inventory changes) but requires synchronization to prevent race conditions or invalid memory access during the `Tick`.
 
-### Summary Cheat Sheet: Architectural Filter Matrix
+**Logical State Mutations:**
+
+* **Equipping/Unequipping:** Moving an item from an inventory array to an equipment slot, ensuring the stat recalculation happens in a controlled sequence.
+* **Stat Recalculation:** Triggering a full update of an entity's `EntityHotData` based on new class/race formulas after a buff or level-up.
+* **Lifecycle Management:** Spawning, despawning, or re-initializing entities, where doing so "mid-tick" would risk corrupting the SoA (Structure of Arrays) buffers.
+
+**Cross-System Synchronization:**
+
+* **Deferred Logic Execution:** When a system (like a UI click handler) needs to trigger a logic change in the `EntityRegistry`, but the `EntityRegistry` is currently locked or being iterated over by another system.
+* **Batch Processing:** Collecting multiple state-change requests over the course of a frame and resolving them at the start of the next `Tick` to ensure a consistent game state.
+
+## Summary Cheat Sheet: Architectural Filter Matrix
 
 When implementing a new feature, ask your team these two diagnostic questions to choose the correct layout pipeline instantly:
 
-```
-                  Is it a permanent value or a transient spark?
-                                |
-        +-----------------------+-----------------------+
-        |                                               |
-  [ Permanent Value ]                             [ Transient Spark ]
-        |                                               |
- Does it exist in memory?                 Is it driven by data strings?
-        |                                               |
-  +-----+-----+                                   +-----+-----+
-  |           |                                   |           |
-(Yes)        (No)                               (Yes)        (No)
-  |           |                                   |           |
-  v           v                                   v           v
-IsDirty    (Not an                             Delegate    Reactive
-Flag       ECS Event)                          Registry    Buffer
+```text
+               Is it a permanent value, a transient spark, or a state transaction?
+                                        |
+        +-------------------------------+-------------------------------+
+        |                               |                               |
+ [ Permanent Value ]           [ Transient Spark ]            [ State Transaction ]
+        |                               |                               |
+Does it exist in memory?    Is it driven by data strings?   Does it change game state?
+        |                               |                               |
+  +-----+-----+                   +-----+-----+                   +-----+-----+
+  |           |                   |           |                   |           |
+(Yes)       (No)                (Yes)       (No)                (Yes)       (No)
+  |           |                   |           |                   |           |
+  v           v                   v           v                   v           v
+IsDirty    (Not an             Delegate    Reactive           Command     (N/A)
+Flag      ECS Event)           Registry     Buffer             Queue
 
 ```
+
+
+## Separation of Concerns
+
+* **IsDirty Flags** are for *Observability* (View systems watching the Model).
+* **Reactive Buffers** are for *Feedback* (Transient visual/audio output).
+* **Delegate Tables** are for *Configuration* (Mapping data keywords to logic).
+* **Command Queues** are for *Orchestration* (Ensuring mutations happen in the right order).
+
+
 
 ## Example
 
 In this example, an entity receives a 10 Hit Points.
 
-When an entity receives **10 HP** (either taking 10 damage or gaining 10 healing), your engine processes this using both the **`IsDirty` Flag pipeline** and the **Reactive Event Buffer pipeline** simultaneously.
+When an entity receives **10 HP** (damage or healing), your engine no longer allows systems to mutate data directly. Instead, it processes the change as a transactional workflow that coordinates the Command Queue, the IsDirty Flag pipeline, and the Reactive Event Buffer pipeline in a single, deterministic sequence.
 
 The process moves sequentially down a clean pipeline across your layers:
 
@@ -345,76 +337,81 @@ The process moves sequentially down a clean pipeline across your layers:
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Controller as CombatSystem (Controller)
+    participant Requester as Input/UI/Trigger
+    participant Queue as Command Queue
+    participant Engine as EngineDriver (Orchestrator)
     participant Model as WorldRegistry (Model)
-    participant View as Godot UI Node (View)
+    participant View as Godot UI/FX (View)
 
-    Note over Controller: 1. Process Logic
-    Controller->>Model: Accesses Entity's Health component by 'ref'
-    Model->>Model: Modifies Health value (+10 or -10)
+    Requester->>Queue: Enqueue(new ChangeHealthCommand)
+    Note over Engine: Tick Boundary
+    Engine->>Queue: Dequeue()
+    Engine->>Model: Accesses Health component by 'ref'
+    Model->>Model: Modifies Health value (+10/-10)
     Model->>Model: Flips IsDirty = true
-    Controller->>Model: Appends a raw VisualDamageEvent struct to the buffer
+    Engine->>Model: Appends VisualDamageEvent to Reactive Buffer
 
-    Note over View: 2. Next Render Frame Boundary Hits (_Process)
-    View->>Model: Drains Reactive Event Buffer
-    View->>View: Spawns floating text popup on screen
-    View->>Model: Sweeps persistent Health components
-    alt IsDirty == true
-        View->>View: Re-renders the text or health bar on the Stats Screen
-        View->>Model: Resets IsDirty = false
-    end
+    Note over View: 2. Render Frame Tick
+    View->>Model: Drains Reactive Buffer (Spawns popups)
+    View->>Model: Sweeps IsDirty (Updates UI Bars)
+    View->>Model: Resets IsDirty = false
 
 ```
 
-### Step 1: Updating the Health Value (Model Layer)
+### Step 1: Enqueueing the Intent (Command Queue)
 
-Your logic system (Controller) mutates the raw numbers inside the model registry. It **never** talks to Godot UI objects. Instead, it updates the data in place and leaves tracking signals for the View:
+Before modifying state, systems declare their intent. This acts as a transactional gatekeeper to ensure deterministic execution and prevent race conditions.
 
 ```csharp
-// Inside your pure C# CombatSystem
-public void AdjustHealth(int entityId, int amount)
+// Inside your System (e.g., CombatSystem)
+public void RequestHealthChange(int entityId, int amount)
 {
-    // 1. Get a direct memory reference to the entity's struct
-    ref var health = ref _registry.GetModifiable(entityId);
-
-    // 2. Mutate the health value directly in memory
-    health.CurrentHp += amount;
-
-    // 3. Mark it as dirty so the Stats Screen knows a change occurred
-    health.IsDirty = true;
-
-    // 4. Record a transient event for instant juice/FX (like floating combat text)
-    _combatSystem.FrameEvents.Add(new VisualDamageEvent 
-    { 
-        TargetEntityId = entityId, 
-        DamageAmount = amount 
+    _engineDriver.AddCommand(new GameCommand { 
+        Type = CommandType.AdjustHealth, 
+        EntityId = entityId, 
+        Value = amount 
     });
 }
 
 ```
 
-### Step 2: Updating the Health Stats Screen (View Layer)
+### Step 2: Processing the Transaction (EngineDriver)
 
-At the end of the execution frame, Godot triggers its graphics tick (`_Process`). The stateless View system monitors the flags left behind by the model:
+The `EngineDriver` drains the queue during the `Tick`, ensuring all state mutations occur in a controlled, safe sequence.
 
-#### Phase A: Spawns One-Shot Visual Feedback (Reactive Buffer)
+```csharp
+// Inside EngineDriver.Tick()
+while (_queue.HasCommands)
+{
+    var cmd = _queue.Dequeue();
+    if (cmd.Type == CommandType.AdjustHealth)
+    {
+        ref var health = ref _registry.GetModifiable(cmd.EntityId);
+        health.CurrentHp += cmd.Value; // Mutate
+        health.IsDirty = true;         // Flag for View
+        _combatSystem.FrameEvents.Add(new VisualDamageEvent { ... }); // FX
+    }
+}
 
-The View looks at the temporary event buffer to create frame-bound special effects. It streams the list, spawns a text pop-up at the entity's coordinates, and completely clears the buffer:
+```
+
+### Step 3: The View Layer (Reactive & Polling)
+
+**Phase A: Reactive Buffer (Visuals)**
+The View streams the temporary event buffer to create frame-bound FX, then clears it to maintain zero-allocation performance.
 
 ```csharp
 // Inside Godot View's _Process loop
 foreach (var evt in _combatSystem.FrameEvents)
 {
-    // Spawns a physical floating number node in Godot (+10 or -10)
     SpawnFloatingTextPopUp(evt.TargetEntityId, evt.DamageAmount); 
 }
-_combatSystem.FrameEvents.Clear(); // Emptied immediately
+_combatSystem.FrameEvents.Clear(); 
 
 ```
 
-#### Phase B: Redraws the Persistent Stats Screen Layout (`IsDirty`)
-
-Next, the View reads your main health array. Instead of spending costly CPU cycles translating integers to strings every single frame for every entity on screen, it checks the boolean flag:
+**Phase B: `IsDirty` Sweep (UI)**
+The View sweeps the components. If `IsDirty` is false, it skips the expensive label-update logic entirely, maximizing frame rate.
 
 ```csharp
 // Inside Godot View's _Process loop
@@ -422,20 +419,15 @@ Span<HealthComponent> components = _registry.GetSpan();
 for (int i = 0; i < components.Length; i++)
 {
     ref var health = ref components[i];
+    if (!health.IsDirty) continue; // High-speed skip
 
-    // FAST SKIP: If the entity didn't gain/lose HP, the CPU skips this instantly!
-    if (!health.IsDirty) 
-        continue;
-
-    // UPDATE SCREEN: Only runs for entities whose health actually shifted this frame
-    Label hpStatsTextLabel = GetNode<Label>($"UI/StatsScreen/Unit_{health.EntityId}/HpValue");
-    hpStatsTextLabel.Text = $"{health.CurrentHp} HP";
-
-    // CLEANUP: Reset the flag so it won't redraw next frame unless changed again
-    health.IsDirty = false;
+    var label = GetNode<Label>($"UI/Unit_{health.EntityId}/HpValue");
+    label.Text = $"{health.CurrentHp} HP";
+    health.IsDirty = false; // Reset
 }
 
 ```
+
 
 ### Why this split works beautifully
 
@@ -443,9 +435,9 @@ If your character stands perfectly still for an hour, their health value remains
 
 * * *
 
-## 4. Dense Life Cycles: Object Pools & Blind Sweeps
+## 5. Dense Life Cycles: Object Pools & Blind Sweeps
 
-While the three previous pipelines govern sparse notifications, structural data modifications, and decoupling routers, certain high-velocity game genres (e.g., Bullet Hells, Gauntlet-like swarm hordes, or large army simulation battlefields) introduce a different performance challenge.
+While the four previous pipelines govern sparse notifications, structural data modifications, and decoupling routers, certain high-velocity game genres (e.g., Bullet Hells, Gauntlet-like swarm hordes, or large army simulation battlefields) introduce a different performance challenge.
 
 If an engine forces 5,000 projectiles or 3,000 active swarm enemies to update their positions every single frame, checking an `IsDirty` tracking flag becomes a performance bottleneck. Because 100% of the data structures are continuously moving and reacting, 100% of the tracking flags return `true`. 
 
@@ -646,6 +638,7 @@ To wrap your mind around your entire event and instance toolbelt, use these two 
 | **Instant Level-Up Flash FX** | **Sparse** (Happens once) | Short-Lived | **Reactive Event Buffers** |
 | **AI Routine Keyword Binding** | **Static** (Configured at boot) | Permanent | **Central Delegate Routing Tables** |
 | **5,000 Projectiles / Particles** | **Dense** (100% change every frame) | Short-Lived | **Object Pools + Sequential Blind Sweeps** |
+| **Cross-System State Changes** | **Low** (Discreet Events) | Transient | **Command-Driven Event Queue** |
 
 <br>
 
@@ -655,3 +648,4 @@ To wrap your mind around your entire event and instance toolbelt, use these two 
 | **Juice & One-Shot Audio** (Explosion flashes, Sound effects, Damage numbers) | **Sparse** (Instant occurrences) | Transient | **Reactive Event Buffers** |
 | **Data-Driven Configuration** (AI routine strings, Skill blueprints from JSON) | **Static** (Set at boot time) | Permanent | **Central Delegate Routing Tables** |
 | **Swarms / Projectiles** (Bullets, Army Troops, Horde Enemies, Particles) | **Dense** (100% change every frame) | Short/Medium | **Object Pools + Blind Sweeps** |
+| **State Mutations** (Equipping items, Stat leveling, NPC spawning) | **Discrete** (Logic-driven events) | Transient | **Command-Driven Queue** |
