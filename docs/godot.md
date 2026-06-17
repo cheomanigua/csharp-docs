@@ -40,7 +40,7 @@ For high-density dynamic entities (e.g., bullets, swarm enemies), implement a **
 | Collision Type | Use Case | Recommended Implementation |
 | --- | --- | --- |
 | **Dynamic-vs-Dynamic** | Bullets, Swarm Enemies | **C# Spatial Grid** (Custom logic) |
-| **Dynamic-vs-Static** | Walls, Obstacles | **Godot `PhysicsServer2D**` (Query-only) |
+| **Dynamic-vs-Static** | Walls, Obstacles | **Godot `PhysicsServer2D`** (Query-only) |
 
 
 ### 2B. Collisions: Spatial Grid + PhysicsServer2D
