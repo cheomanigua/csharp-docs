@@ -405,7 +405,7 @@ You are currently handling your gear exactly as you should for a high-performanc
 
 Below is a list of the files involved in each calculation:
 
-**Base Stat Generation:** `FormulaProcessor.cs`, `formulas.json`, `StatInitializationSystem.cs`, `EntityRegistry.cs`
+**Base Stat Generation:** `FormulaProcessor.cs`, `formulas.json`, `StatsUpdateSystem.cs`, `EntityRegistry.cs`
 
 **Advanced Skill/Combat Scaling:** `FormulaProcessor.cs`, `formulas.json`
 

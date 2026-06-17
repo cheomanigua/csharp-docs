@@ -132,6 +132,6 @@ By strictly separating the *Human Taxonomy* (JSON blueprints and names) from the
 
 * **Initialization Flow:** `Program.cs` bootstraps the `EngineDriver`, which coordinates the `Controller` (data loader) and the `Registry` (memory storage).
 * **Data Structure:** You are using high-performance, contiguous memory layouts (`EntityHotData` as a `struct` with `fixed` buffers) to ensure cache locality, aligned with your Data-Oriented Design goals.
-* **Systems Integration:** Your `EngineDriver` acts as the orchestrator, routing `GameCommand` objects through a `CommandQueue` to specialized systems (`StatInitializationSystem`, `EquipmentSystem`, `RenderSystem`).
+* **Systems Integration:** Your `EngineDriver` acts as the orchestrator, routing `GameCommand` objects through a `CommandQueue` to specialized systems (`StatsUpdateSystem`, `EquipmentSystem`, `RenderSystem`).
 * **Formula Logic:** The `FormulaProcessor` acts as the agnostic bridge between your static JSON definitions and the live `EntityHotData`, allowing for dynamic stat scaling without recompilation.
 

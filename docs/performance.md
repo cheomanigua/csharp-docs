@@ -40,8 +40,6 @@ These are types that the .NET Garbage Collector (GC) must track.
 * **Packed Structs:** Structs using `LayoutKind.Explicit` or `Sequential` designed for high-density, cache-friendly storage.
 * `[StructLayout(LayoutKind.Sequential)]` ensures fields appear in memory in order.
 * `[StructLayout(LayoutKind.Explicit)]` allows precise control using `[FieldOffset]`.
-
-
 * **Performance Buffers:** Structs containing `fixed` buffers used for high-frequency operations (like combat math). These require the `unsafe` keyword.
 * **Command Buffers:** Blittable structs stored in a contiguous `Queue<T>` that act as the single point of entry for state mutation, ensuring all memory modifications remain predictable and deterministic.
 
@@ -259,7 +257,7 @@ We prevent frame spikes during pathfinding and target scanning using two archite
 | **7. Deferred Lifecycle Flush** | O(C) | ~0.15 ms | Array-based state synchronization |
 | **Total Simulation Cost** | — | **~3.27 ms** | **Uses <10% of a 33.33ms (30Hz) frame.** |
 
----
+<br>
 
 ### Architectural Roadmap: Moving Toward Production-Ready ECS
 
@@ -313,3 +311,8 @@ Not at all. You have successfully implemented a **Data-Oriented** architecture b
 * **Think of SoA as "DOD-Pro":** It is the optimization you pull out when you have reached your entity limit and need to squeeze out that final 10% of performance.
 
 **My recommendation:** Stay with your current AoS implementation while you build your features. Only refactor to SoA if you find that a specific system (like the Combat Processor) is causing a cache-miss bottleneck that prevents you from reaching your entity count goals.
+---
+
+# `for` over `foreach`
+
+For high performance requirements, like calculating movement or combat every frame, use `for` loops over `foreach` loops.

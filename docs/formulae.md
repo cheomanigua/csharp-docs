@@ -11,7 +11,7 @@ This document outlines the interaction between your data files and the `FormulaP
 The system is divided into three distinct roles:
 
 * **Data Layer (`.json`)**: Contains raw definitions for entities, biological traits (races), archetypes (classes), and the mathematical instructions for formulas.
-* **Initialization Layer (`StatInitializationSystem.cs`)**: The bridge that triggers the setup of an entity's statistics.
+* **Initialization Layer (`StatsUpdateSystem.cs`)**: The bridge that triggers the setup of an entity's statistics.
 * **Processor Engine (`FormulaProcessor.cs`)**: The logic handler that interprets JSON instructions into executable game code.
 
 
@@ -40,7 +40,7 @@ The decision-making process happens within the **calling code**, which directs s
 
 ### Initialization Workflow (`UpdateStats`)
 
-1. **Trigger**: `StatInitializationSystem.cs` identifies the entity's `Class` and `Race`.
+1. **Trigger**: `StatsUpdateSystem.cs` identifies the entity's `Class` and `Race`.
 2. **Dispatch**: It calls `RecalculateStats()`, which explicitly directs the `"UpdateStats"` formula to the `ExecuteUpdate()` method.
 3. **Mutation**: `ExecuteUpdate()` processes the `Set`, `Add`, and `Multiply` operations, pulling source values from `classes.json` and `races.json` to populate `stats.Values`.
 
