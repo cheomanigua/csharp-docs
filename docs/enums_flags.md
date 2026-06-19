@@ -172,6 +172,8 @@ In C#, the `[Flags]` attribute is used with enums to indicate that the enum valu
 
 By convention, flags name should be in plural.
 
+## Basic Usage
+
 ### Declaration
 
 ```csharp
@@ -250,6 +252,7 @@ class Program
 }
 ```
 
+## Comparison Patterns
 
 ### Comparing Bitmasks
 Here’s how to perform common comparisons with bitmasks in C#. Using bitmasks is faster then using HasFlag:
@@ -491,4 +494,144 @@ Console.WriteLine($"{element}: {Convert.ToString(element, 2).PadLeft(3, '0')}");
 ### Notes
 - The `HasFlag` method is convenient but performs a boxing operation for enums, which may impact performance in tight loops. Use bitwise operations for performance-critical code.
 - Ensure the enum is marked with `[Flags]` to enable proper string representation (e.g., `Read, Write` instead of a numeric value).
+
+* * *
+
+## Mask-Based Filtering
+
+The example below uses bitmasks to filter the category of an EntityID array for a RPG game that is architected by using Data-Driven Design and ECS. For instance, all items related data have an EntityID from 0 to 255:
+
+```json
+{
+  "30": { <--- EntitiyId
+    "Name": "Ring of Strength", 
+    "Categories": { "Type": "Accessory", "Execution": "Immediate" },
+    "GrantedComponents": [
+      { "Tag": "AttributeComponent", "Properties": { "Target": "Strength", "Value": "3.0" } }
+    ]
+  },
+  "101": { <--- EntityId
+    "Name": "Sword of Flames", 
+    "Categories": { "Type": "Weapon", "Execution": "Immediate" },
+    "GrantedComponents": [
+      { "Tag": "WeaponComponent", "Properties": { "Damage": "10.0", "DamageType": "Physical" } },
+      { 
+        "Tag": "MagicComponent", 
+        "Properties": { "Trigger": "OnHit", "Effect": "Damage", "Value": "15.0", "DamageType": "Fire" } 
+      }
+    ]
+  }
+}
+```
+
+This is how the Mask-Based Filtering logic works:
+
+```csharp
+public static class EntityMasks
+{
+    // These values identify the bit-flags corresponding to your current pointer ranges
+    public const int ITEM_MASK       = 0x000; // 0-255 (No high bits set)
+    public const int NPC_MASK        = 0x100; // 256 (Bit 8 set)
+    public const int PROJECTILE_MASK = 0x200; // 512 (Bit 9 set)
+    
+    // Mask to isolate only the type bits (ignoring the 0-255 index bits)
+    public const int TYPE_MASK       = ITEM_MASK | NPC_MASK | PROJECTILE_MASK; 
+}
+
+public ItemData? GetItem(int id)
+{
+    // 1. Bitwise Type Check: Is this actually an item?
+    if ((id & EntityMasks.TYPE_MASK) != EntityMasks.ITEM_MASK) return null;
+
+    // 2. Bounds Check: Is the ID within our array memory?
+    if (id >= 0 && id < _itemDatabase.Length)
+        return _itemDatabase[id];
+
+    return null;
+}
+```
+
+### Understanding EntityMasks and Bitwise Filtering
+
+Your code utilizes the concepts of **Bitmasks** to partition and validate entity IDs efficiently. Here is how the logic works:
+
+#### 1. The Strategy: Partitioning
+
+By assigning IDs in specific bit-blocks (e.g., `0x100` for NPCs, `0x200` for Projectiles), you are creating a system where the "Type" of an entity is encoded directly into its ID.
+
+* **`ITEM_MASK` (0x000)**: Uses the lowest bits (0-255).
+* **`NPC_MASK` (0x100)**: Flips bit 8.
+* **`PROJECTILE_MASK` (0x200)**: Flips bit 9.
+
+#### 2. The Power of `TYPE_MASK`
+
+Using the **Bitwise OR** (`|`) operator to create `TYPE_MASK` creates a "master mask" that identifies the structural region of your ID, allowing you to ignore the specific index (0-255) and focus only on the category bits.
+
+#### 3. Efficient Validation
+
+In your `GetItem(int id)` method, you perform a **Fail-Fast** check:
+
+```csharp
+if ((id & EntityMasks.TYPE_MASK) != EntityMasks.ITEM_MASK) return null;
+
+```
+
+* **The Operation**: You use the bitwise `&` (AND) operator to extract the category bits of the `id`.
+* **The Comparison**: If the extracted bits don't match `ITEM_MASK`, the system knows instantly—without checking the array or memory—that the ID is not an item.
+* **Why it's fast**: Bitwise `&` is a single CPU instruction, which is significantly faster than standard range checking or complex conditionals.
+
+### How to document this in your file
+
+You can add this to a new section in your `enums_flags.md` file called **"Advanced Application: Mask-Based Entity Filtering"**.
+
+### Key Takeaways
+
+* **Safety**: You are preventing invalid data from reaching your array access logic by validating the ID's type first.
+* **Performance**: You are using bitwise `&` rather than `HasFlag` or multiple `if` branches, which is preferred for performance-critical systems like game engines.
+* **Scalability**: By updating `TYPE_MASK` via OR operations, the code is easily extensible if you add more entity types later.
+
+### TYPE_MASK
+
+To understand `TYPE_MASK`, you have to realize that your `id` carries two different pieces of information at the same time:
+
+1. **The Index**: Which slot in the array it occupies (the lower 8 bits, 0-255).
+2. **The Type**: Which category it belongs to (the higher bits, 256 and 512).
+
+### The "Filter" Concept
+
+When you look at an entity `id` like `260` (which is an NPC), its binary looks like this:
+`0001 0000 0100` (Binary for 260)
+
+If you only want to know the **Type**, you need to "hide" the index part (`0000 0100`) and only look at the category part (`0001 0000 0000`).
+
+**`TYPE_MASK` is the tool that hides the index.**
+
+### How the `&` (AND) operation works:
+
+When you perform `(id & TYPE_MASK)`, the computer performs a logical "multiplication" on every bit:
+
+* If the mask has a `1`, the original bit stays.
+* If the mask has a `0`, the original bit is forced to `0` (hidden).
+
+**Example: Is ID `260` an Item?**
+
+* **ID**: `0001 0000 0100` (260)
+* **MASK**: `0011 0000 0000` (0x300)
+* **Result**: `0001 0000 0000` (0x100, which is `NPC_MASK`)
+
+Now compare the result:
+`0x100` (Result) `!=` `0x000` (ITEM_MASK). **The check returns `true`, and the function correctly returns `null` because it's an NPC, not an Item.**
+
+### Why is this better than just checking the number?
+
+If you didn't have `TYPE_MASK`, you would have to write:
+`if (id >= 256 && id < 512)`
+
+While that works for now, what happens if you add more entity types or move them around? With `TYPE_MASK`, you are asking the CPU to ignore the "noise" (the specific index) and look only at the "category" (the bits that define the type).
+
+### In short:
+
+* `TYPE_MASK` defines the **"Region of Interest"** in the number.
+* By setting it to `0x300`, you are telling the computer: *"I don't care about the last 8 bits (the index); I only care about bits 8 and 9 (the category)."*
+
 

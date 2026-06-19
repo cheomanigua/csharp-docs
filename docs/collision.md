@@ -160,12 +160,38 @@ PhysicsServer2D.BodySetState(_entityToRid[entityId], PhysicsServer2D.BodyState.P
 
 ```
 
-### Important Warning for your Hybrid Strategy:
-
-Since your C# system handles IDs up to `MaxEntityCapacity`, ensure that **no part of your code** accidentally assigns an `entityId` larger than 1023, or you will trigger an `IndexOutOfRangeException` across your entire architecture.
-
-### Synchronization with PhysicsServer2D
-
 Since IDs are fixed-range indices, we maintain a mirroring array of `RID[]` (Resource IDs) the same size as `MaxEntityCapacity`. When an entity is spawned, the `IDProvider` assigns a unique index, and the `GodotService` allocates a corresponding `RID` at that same index. This eliminates the need for complex hash-map lookups during the physics synchronization phase.
 
 *Note: The `SpatialGrid` is dynamic and sparse, but the total `EntityId` range must stay within `EngineConfig.MaxEntityCapacity` to prevent `IndexOutOfRangeException`.*
+
+### ID Lifecycle Management
+
+* **The Source of Truth**: The `IDProvider` service is the unique source for `EntityId` allocation. No manual assignment or hardcoded IDs are permitted.
+* **Registry Handshake**: The `EntityRegistry` acts as the **Data Storage** for these IDs. Upon spawning, a system must:
+   1. Request a valid ID from the `IDProvider`.
+   2. Initialize the entity state (e.g., `EntityHotData`) using that ID.
+   3. Register the ID into the `EntityRegistry` to activate it for the next physics/combat tick.
+
+### Important Structural Adjustment
+
+In `EntityRegistry.cs`, your `ProcessCombat` loop iterates over `_activeCount`. By using the `IDProvider` partitioning, you can easily filter this loop in the future if you ever need to perform combat calculations *only* for NPCs:
+
+```csharp
+// Example: If you only want to process NPCs in combat
+for (int i = 0; i < _activeCount; i++)
+{
+    int eid = _activeEntities[i];
+    // Check if ID is in the NPC range (256-511)
+    if (eid >= 256 && eid < 512) 
+    {
+        // Process NPC combat logic
+    }
+}
+
+```
+
+The `IDProvider` is the **Generator**, and the `EntityRegistry` is the **Consumer**.
+
+### Important Warning for your Hybrid Strategy:
+
+Since your C# system handles IDs up to `MaxEntityCapacity`, ensure that **no part of your code** accidentally assigns an `entityId` larger than 1023, or you will trigger an `IndexOutOfRangeException` across your entire architecture.
