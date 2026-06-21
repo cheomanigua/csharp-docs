@@ -111,7 +111,7 @@ Think of it as a **"Cache-Invalidation" relationship**:
 ### A Practical Example in Your Engine
 
 * **Flyweight:** Your `WeaponComponent` doesn't store the full description of "Excalibur." It just stores an `int WeaponId`.
-* **Dirty Flag:** When you equip a new sword, you don't need to rebuild the entire entity or update 5,000 items. You just flip the `IsDirty` flag on that one `EntityHotData` struct.
+* **Dirty Flag:** When you equip a new sword, you don't need to rebuild the entire entity or update 5,000 items. You just flip the `IsDirty` flag on that one `EntityStats` struct.
 * **Result:** You get the low-memory benefits of the Flyweight pattern with the high-performance update benefits of the Dirty Flag pattern.
 
 **Summary:** They do not confront each other; they collaborate. The Flyweight pattern minimizes the **data load**, while the Dirty Flag minimizes the **computational load**.

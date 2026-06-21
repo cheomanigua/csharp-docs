@@ -283,7 +283,7 @@ Here is an extended, practical production guide detailing exactly when to deploy
 **Logical State Mutations:**
 
 * **Equipping/Unequipping:** Moving an item from an inventory array to an equipment slot, ensuring the stat recalculation happens in a controlled sequence.
-* **Stat Recalculation:** Triggering a full update of an entity's `EntityHotData` based on new class/race formulas after a buff or level-up.
+* **Stat Recalculation:** Triggering a full update of an entity's `EntityStats` based on new class/race formulas after a buff or level-up.
 * **Lifecycle Management:** Spawning, despawning, or re-initializing entities, where doing so "mid-tick" would risk corrupting the SoA (Structure of Arrays) buffers.
 
 **Cross-System Synchronization:**

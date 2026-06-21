@@ -111,7 +111,7 @@ public struct WeaponComponent {
 Use this only when you need inlined arrays for extreme speed.
 
 ```csharp
-public unsafe struct EntityHotData {
+public unsafe struct EntityStats {
     public int EntityId;
     public fixed int Stats[10]; // Inlined memory
 }
@@ -148,7 +148,7 @@ public class CommandQueue {
 
 Unlike the other patterns that focus on **how memory is packed for reading**, the **Command Queue** pattern focuses on **how memory is modified for safety**.
 
-* **Prevents Race Conditions:** By queueing intents, you ensure that no system is writing to `EntityHotData` while another system is midway through a `Span<T>` sweep.
+* **Prevents Race Conditions:** By queueing intents, you ensure that no system is writing to `EntityStats` while another system is midway through a `Span<T>` sweep.
 * **Batch Consistency:** All mutations are executed in a single, predictable loop during the `EngineDriver.Tick()`. This keeps the CPU cache consistent because the memory state only changes during a specific, known window of time.
 * **Deterministic Replay:** Because your commands are now serialized in a queue, you can log every `GameCommand` to a file. This allows you to recreate any game state or debug complex combat interactions simply by "replaying" the command sequence.
 
@@ -181,7 +181,7 @@ If your struct contains *only* blittable types (types that don't need translatio
 
 #### 3. Unsafe (Fixed) — **GC-Ignored**
 
-When you use `unsafe` and `fixed` buffers (like in your `EntityHotData`), you are explicitly taking responsibility for that memory.
+When you use `unsafe` and `fixed` buffers (like in your `EntityStats`), you are explicitly taking responsibility for that memory.
 
 * The GC does not track the content of `fixed` arrays.
 * **Critical Warning:** Because the GC is not tracking this, you must ensure that your `unsafe` code does not access memory that has been deallocated or is being reused. You are essentially stepping outside the "safety net" that the GC provides.
@@ -195,7 +195,7 @@ By defining your `GameCommand` as a `struct` consisting only of blittable types 
 
 ### Why this matters for your ECS
 
-Your current architecture for `EntityHotData` and `WeaponComponent` is **GC-friendly**. By keeping these structs packed and blittable (or using `unsafe` for buffers), you are preventing the GC from having to check thousands of individual components every frame. This is the single biggest performance win for an ECS with 5,000+ NPCs.
+Your current architecture for `EntityStats` and `WeaponComponent` is **GC-friendly**. By keeping these structs packed and blittable (or using `unsafe` for buffers), you are preventing the GC from having to check thousands of individual components every frame. This is the single biggest performance win for an ECS with 5,000+ NPCs.
 
 **In summary:** If your struct contains `string` or `class`, the GC is involved. If your struct is made of `int`, `float`, `bool`, or `fixed` arrays, you have successfully moved that data into a layout where the GC has little to no work to do.
 
@@ -233,7 +233,7 @@ When implementing status effects like "Frozen," we avoid the "Naive Engine" trap
 
 To keep balance formulas flexible via JSON, we avoid string-parsing at runtime, which would be prohibitively slow.
 
-* **The Execution:** At bootstrap, your engine parses combat formulas (e.g., `"BaseDamage + (Str * 1.5)"`) into an **Arithmetic Execution Tree**. During the simulation tick, the `FormulaProcessor` performs direct memory lookups against our `EntityHotData` pools, feeding raw values into pre-compiled math trees, allowing for high-frequency combat calculations without string overhead.
+* **The Execution:** At bootstrap, your engine parses combat formulas (e.g., `"BaseDamage + (Str * 1.5)"`) into an **Arithmetic Execution Tree**. During the simulation tick, the `FormulaProcessor` performs direct memory lookups against our `EntityStats` pools, feeding raw values into pre-compiled math trees, allowing for high-frequency combat calculations without string overhead.
 
 #### 4. Spatial Grid Matrix & Structural Command Buffers
 
@@ -293,14 +293,14 @@ AoS is **"Good Enough"** for most game logic because it provides the majority of
 
 AoS keeps "related data" together in a single conceptual bucket.
 
-* **Ease of Use:** If you want to check an entity's status, you grab one struct: `EntityHotData data = registry[id];`. It feels like working with a singular object.
+* **Ease of Use:** If you want to check an entity's status, you grab one struct: `EntityStats data = registry[id];`. It feels like working with a singular object.
 * **Complexity:** Implementing SoA requires splitting that struct into five different arrays (`int[] healths`, `int[] strengths`, `bool[] isDirtys`, etc.). This adds significant boilerplate code to your `EntityRegistry` and `EntitySieve` because you now have to synchronize the indices of five arrays instead of just one.
 
 ### 3. When SoA becomes necessary
 
 SoA becomes the "better" choice only when your systems become highly specialized.
 
-* **The "Partial Data" Problem:** If your `CombatSystem` only needs `Damage` and `Strength`, but your `EntityHotData` struct also contains `Mana`, `EquippedItemIds`, and `IsDirty`, your CPU is loading "dead weight" into the cache line.
+* **The "Partial Data" Problem:** If your `CombatSystem` only needs `Damage` and `Strength`, but your `EntityStats` struct also contains `Mana`, `EquippedItemIds`, and `IsDirty`, your CPU is loading "dead weight" into the cache line.
 * **The SoA Solution:** By using SoA, you split those fields into separate arrays. The `CombatSystem` only loads the `Damage[]` and `Strength[]` arrays. Because there is no "dead weight," you can fit many more entities into a single L1 cache line, which is why SoA is the standard for high-performance ECS libraries (like Unity's DOTS or Flecs).
 
 ### Summary: Was I wrong to suggest AoS?

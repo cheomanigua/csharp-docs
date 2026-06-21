@@ -32,7 +32,7 @@ Don't just add random spawning; build the **Life Cycle Controller**:
 
 1. **Implement a `SpawnerSystem`:**
 * Create a `SpawnCommand` struct.
-* Add a system that consumes these commands to initialize `EntityHotData` at specific coordinates (using your existing `StatsUpdateSystem` logic).
+* Add a system that consumes these commands to initialize `EntityStats` at specific coordinates (using your existing `StatsUpdateSystem` logic).
 
 
 2. **Add a `TargetComponent`:**

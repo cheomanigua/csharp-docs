@@ -115,7 +115,7 @@ public class IDProvider
 
 #### Why this is a "High Performance" Choice:
 
-* **O(1) Access**: Since `EntityId` acts as a direct index into fixed-size arrays (e.g., `_hotData[entityId]`), access is instantaneous.
+* **O(1) Access**: Since `EntityId` acts as a direct index into fixed-size arrays (e.g., `_stats[entityId]`), access is instantaneous.
 * **Type Partitioning**: By partitioning ranges, we avoid ID collisions between disparate systems (e.g., an Item accidentally overwriting an NPC's data) and allow for bitwise filtering of entity types.
 * **Cache Locality**: Power-of-two alignment ensures that data segments stay aligned with CPU cache lines, minimizing cache misses during high-throughput iterations.
 
@@ -125,7 +125,7 @@ In your architecture, the `int entityId` is **not a random UUID or unique databa
 
 * **Fixed Capacity:** You have `EngineConfig.MaxEntities` (or `MaxEntityCapacity` = 1024).
 * **Array Mapping:** Your systems use the `entityId` as a direct array index to access component data:
-* `EntityRegistry._hotData[entityId]`
+* `EntityRegistry._stats[entityId]`
 * `MetadataRegistry._metadata[entityId]`
 * `EntitySieve._data[entityId]`
 * `TagGrid._entityMasks[entityId]`
@@ -134,7 +134,7 @@ In your architecture, the `int entityId` is **not a random UUID or unique databa
 ### Why this is a "High Performance" Choice:
 
 * **O(1) Access:** Accessing a component is as fast as `array[index]`. There is no dictionary hashing or key searching.
-* **Cache Locality:** Because you are using dense arrays (`_hotData`, `_metadata`), your data is likely packed together in memory. This is the foundation of a **Data-Oriented Design (DOD)**.
+* **Cache Locality:** Because you are using dense arrays (`_stats`, `_metadata`), your data is likely packed together in memory. This is the foundation of a **Data-Oriented Design (DOD)**.
 * **The Bridge to PhysicsServer2D:** Since you have a fixed range of IDs (0–1023), you can perfectly mirror these in Godot by creating an array of `RID` (Resource IDs) the same size as your `MaxEntityCapacity`.
 
 ### How to synchronize with Godot PhysicsServer2D
@@ -169,7 +169,7 @@ Since IDs are fixed-range indices, we maintain a mirroring array of `RID[]` (Res
 * **The Source of Truth**: The `IDProvider` service is the unique source for `EntityId` allocation. No manual assignment or hardcoded IDs are permitted.
 * **Registry Handshake**: The `EntityRegistry` acts as the **Data Storage** for these IDs. Upon spawning, a system must:
    1. Request a valid ID from the `IDProvider`.
-   2. Initialize the entity state (e.g., `EntityHotData`) using that ID.
+   2. Initialize the entity state (e.g., `EntityStats`) using that ID.
    3. Register the ID into the `EntityRegistry` to activate it for the next physics/combat tick.
 
 ### Important Structural Adjustment
