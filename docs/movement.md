@@ -1,5 +1,43 @@
 # Movement System
 
+# Architectural Overview: Movement & Spatial System
+
+### 1. The Core Philosophy: "Intent vs. Execution"
+
+Your engine separates **Intent** (user input/commands) from **Execution** (the simulation systems).
+
+* **Command Queue:** Decouples the Godot platform from your simulation, ensuring your core logic remains deterministic, platform-agnostic, and thread-ready.
+* **Engine Facade:** Your `IEngineFacade` pattern allows Godot to act as a pure rendering server, keeping the high-performance simulation logic isolated.
+
+### 2. The Spatial Partitioning Backbone
+
+To avoid O(N^2) complexity, you have implemented a **Spatial Grid**. This is the engine's primary performance multiplier.
+
+* **Grid Lifecycle:**
+1. **Clear:** Reset the grid at the start of the `Tick()`.
+2. **Populate:** Iterate through active entities (`_moveBuffers.Active`) and map them to cells.
+3. **Query:** Use `GetNearbyEntities` to limit collision/combat checks to local 3x3 neighborhoods.
+
+
+
+### 3. Implementation Checklist for Optimization
+
+You have already built the "chassis." To finalize the high-performance setup, ensure these standards remain enforced:
+
+* **Buffer Management:** Always use `ArrayPool<int>` for temporary buffers to prevent GC pressure. Never allocate memory during the `Tick()` loop.
+* **Zero-Copy Lookups:** Use `Span<T>` and index-based iteration instead of dictionary or list lookups to maximize cache locality.
+* **Data-Driven Behavior:** Transition from "Hardcoded Velocity" to "Force/Impulse" logic. This will allow NPCs to support steering behaviors (Seek, Flee, Separate) by simply modifying their `Behavior` data, rather than changing system code.
+
+
+### What was removed (The "Why"):
+
+* **Redundant Explanations:** I removed the detailed reasoning behind *why* O(N^2) is bad, assuming that since you've already implemented the grid, you already understand the performance benefit.
+* **Conversational Fillers:** I replaced instructional language ("you should focus on...") with direct statements of current architectural goals.
+* **Structural Repetition:** I merged the "Checklist" and "System Expansion" sections, as they both pointed to the same operational requirements.
+
+
+# Basics
+
 Moving from "fixed straight-line movement" to "dynamic entity behavior" is a major milestone. While random spawning is a good **functional** test, it doesn't really challenge your ECS architecture.
 
 To truly evolve your engine, you should focus on **Entity Intelligence and Spatial Partitioning.** Here is why you should skip random spawning and move straight to **Behavioral Steering** and **Spatial Management**:
@@ -12,10 +50,10 @@ If you just spawn entities randomly, you'll soon realize that your `MovementSyst
 
 #### A. Spatial Grid (The Performance Multiplier)
 
-Right now, your `MovementSystem` is likely $O(N)$. If you have 5,000 entities and want them to "react" to each other (e.g., avoid crowding), an $O(N^2)$ distance check will kill your frame rate.
+Right now, your `MovementSystem` is likely O(N). If you have 5,000 entities and want them to "react" to each other (e.g., avoid crowding), an O(N^2) distance check will kill your frame rate.
 
 * **The Goal:** Implement a **Spatial Grid**. Map every entity’s `(x, y)` to a grid cell.
-* **Why:** This allows your movement system to only check neighbors, bringing "awareness" back down to $O(N)$ or even $O(1)$.
+* **Why:** This allows your movement system to only check neighbors, bringing "awareness" back down to O(N) or even O(1).
 
 #### B. Steering Behaviors (The "Life" Factor)
 
@@ -617,7 +655,7 @@ Here is the logical progression for what comes next:
 
 You have already refactored `MovementSystem.cs` to accept the `SpatialGrid` and a `nearbyBuffer`. Now, you must ensure your steering or collision logic actually uses that data.
 
-* **Implement "Local" Steering:** Instead of iterating over all 5,000 entities to find neighbors (an $O(N^2)$ operation), use the grid to only process entities in the current and 8 adjacent cells ($O(N \times \text{small constant})$).
+* **Implement "Local" Steering:** Instead of iterating over all 5,000 entities to find neighbors (an O(N^2) operation), use the grid to only process entities in the current and 8 adjacent cells (O(N \times \text{small constant})).
 * **Resolve Collisions/Separation:** Inside the loop in `MovementSystem.cs`, use the `nearbyBuffer` to iterate only over relevant neighbors to apply force vectors (e.g., separation, alignment, or cohesion).
 
 ### 2. Implement the "Grid Update" Pipeline
