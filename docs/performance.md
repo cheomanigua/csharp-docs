@@ -289,19 +289,147 @@ When you move from `class` objects to `struct` arrays, you achieve the biggest p
 
 AoS is **"Good Enough"** for most game logic because it provides the majority of the cache benefits while remaining very easy to read and maintain.
 
-### 2. Why AoS is easier (and why we started there)
+### 2. Array-of-Structures (AoS)
 
 AoS keeps "related data" together in a single conceptual bucket.
 
 * **Ease of Use:** If you want to check an entity's status, you grab one struct: `EntityStats data = registry[id];`. It feels like working with a singular object.
 * **Complexity:** Implementing SoA requires splitting that struct into five different arrays (`int[] healths`, `int[] strengths`, `bool[] isDirtys`, etc.). This adds significant boilerplate code to your `EntityRegistry` and `EntitySieve` because you now have to synchronize the indices of five arrays instead of just one.
 
-### 3. When SoA becomes necessary
+In AoS, you bundle fields into a single `MovementComponent` struct and store them in one continuous array (e.g., `MovementComponent[]`).
+
+* **The Advantage (Maintainability & "Bulk" Processing):** When `MovementSystem` needs to calculate a new position, it fetches the entire `MovementComponent` struct in one operation. This is highly efficient for complex movement logic where the CPU needs `Velocity`, `Speed`, `Acceleration`, and `Friction` simultaneously. Because all these fields are bundled together in memory, the CPU can pre-fetch the data for the next entity before the loop even requests it.
+* **The Scalability Limit (Cache Pollution):** If you iterate through 5,000 entities but a specific pass of your `MovementSystem` *only* needs to update the `Transform`, you are still loading the `Acceleration` and `Friction` bytes into the cache anyway. If your struct grows too large (e.g., exceeding 64 bytes), you may inadvertently fetch "garbage" data that displaces other useful information, eventually leading to increased cache misses.
+
+    ```csharp
+    using System.Runtime.InteropServices;
+    using System.Numerics;
+    using Source.Core.Math;
+
+    namespace Source.Engine;
+
+    [StructLayout(LayoutKind.Explicit, Size = 32)] // Total size: 32 bytes
+    public struct MovementComponent
+    {
+        [FieldOffset(0)]  public Transform2D Transform; // Transform2D (Assuming 8 bytes for Origin)
+        [FieldOffset(8)]  public Vector2 Velocity; // Vector2 Velocity (8 bytes)
+        [FieldOffset(16)] public Vector2 LastPosition; // Vector2 LastPosition (8 bytes)
+        [FieldOffset(24)] public float Speed; // float Speed (4 bytes)
+        [FieldOffset(28)] public bool Active; // bool Active (1 byte)
+        [FieldOffset(29)] public bool HasLastPosition; // bool HasLastPosition (1 byte)
+    }
+    ```
+
+    ```csharp
+    namespace Source.Engine;
+
+    public class MovementBuffers
+    {
+        // The AoS (Array of Structures) buffer
+        public MovementComponent[] Components = new MovementComponent[EngineConfig.MaxEntities];
+    }
+    ```
+
+    ```csharp
+    using System;
+    using Source.Engine;
+
+    namespace Source.Systems.Movement;
+
+    public static class MovementSystem
+    {
+        public static void Update(Span<MovementComponent> components, float deltaTime)
+        {
+            for (int i = 0; i < components.Length; i++)
+            {
+                // Accessing the component by ref allows us to modify the data in-place
+                ref var comp = ref components[i];
+
+                if (!comp.Active)
+                    continue;
+
+                // Simple, readable access to bundled properties
+                comp.Transform.Origin += comp.Velocity * comp.Speed * deltaTime;
+            }
+        }
+    }
+    ```
+    ```csharp
+    // EngineDriver.cs
+    MovementSystem.Update(_moveBuffers.Components, deltaTime);
+    ```
+
+### 3. Structure-of-Arrays (SoA)
 
 SoA becomes the "better" choice only when your systems become highly specialized.
 
 * **The "Partial Data" Problem:** If your `CombatSystem` only needs `Damage` and `Strength`, but your `EntityStats` struct also contains `Mana`, `EquippedItemIds`, and `IsDirty`, your CPU is loading "dead weight" into the cache line.
 * **The SoA Solution:** By using SoA, you split those fields into separate arrays. The `CombatSystem` only loads the `Damage[]` and `Strength[]` arrays. Because there is no "dead weight," you can fit many more entities into a single L1 cache line, which is why SoA is the standard for high-performance ECS libraries (like Unity's DOTS or Flecs).
+
+In SoA, you store each field in its own continuous array (e.g., `Velocities[]`, `Speeds[]`).
+
+* **The Advantage (Cache Efficiency):** When `MovementSystem` runs, it primarily requires the `Transform2D` and `Velocity` data to update positions. Because your data is partitioned into separate arrays, the CPU loads only the relevant vectors into the cache lines. You avoid "cache pollution" by not loading unused properties (like `LastPositions` or `Active` status) that the `MovementSystem` loop might not need for every iteration.
+* **The Scalability Limit:** As your movement logic becomes more complex (e.g., adding `Friction`, `Acceleration`, or `Gravity` coefficients), your `EngineDriver` must pass an ever-increasing number of individual arrays into the `MovementSystem`. This increases "register pressure" and makes it difficult for the CPU to efficiently manage the dozens of disparate memory pointers required to perform a single update.
+
+    ```csharp
+    using Source.Core.Math;
+    using System.Numerics;
+
+    namespace Source.Engine;
+
+    public class MovementBuffers
+    {
+        // The SoA (Structure of Arrays) buffers
+        public Transform2D[] Transforms = new Transform2D[EngineConfig.MaxEntities];
+        public Vector2[] Velocities = new Vector2[EngineConfig.MaxEntities];
+        public Vector2[] LastPositions = new Vector2[EngineConfig.MaxEntities];
+        public float[] Speeds = new float[EngineConfig.MaxEntities];
+        public bool[] Active = new bool[EngineConfig.MaxEntities];
+        public bool[] HasLastPosition = new bool[EngineConfig.MaxEntities];
+    }
+    ```
+
+    ```csharp
+    using System;
+    using System.Numerics;
+    using Source.Core.Math;
+
+    namespace Source.Systems.Movement;
+
+    public static class MovementSystem
+    {
+        public static void Update(
+            Span<Transform2D> transforms,
+            Span<Vector2> velocities,
+            Span<float> speeds,
+            ReadOnlySpan<bool> activeMask,
+            float deltaTime)
+        {
+            // Move everybody
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                if (!activeMask[i])
+                    continue;
+
+                transforms[i].Origin += velocities[i] * speeds[i] * deltaTime;
+            }
+        }
+    }
+    ```
+
+    ```csharp
+    // EngineDriver.cs
+    MovementSystem.Update(_moveBuffers.Transforms, _moveBuffers.Velocities, _moveBuffers.Speeds, _moveBuffers.Active, deltaTime);
+    ```
+
+### Performance Comparison Table (5,000 Entities)
+
+| Metric | AoS (MovementComponent) | SoA (Current) |
+| --- | --- | --- |
+| **Cache Usage** | Good (General Purpose) | Optimal (High Precision) |
+| **Complexity** | Low (Single bundled object) | High (Managing many arrays) |
+| **System Flexibility** | High (Easier to add features) | Rigid |
+| **Memory Throughput** | Best for general simulation | Best for specialized loops |
 
 ### Summary: Was I wrong to suggest AoS?
 
@@ -311,7 +439,61 @@ Not at all. You have successfully implemented a **Data-Oriented** architecture b
 * **Think of SoA as "DOD-Pro":** It is the optimization you pull out when you have reached your entity limit and need to squeeze out that final 10% of performance.
 
 **My recommendation:** Stay with your current AoS implementation while you build your features. Only refactor to SoA if you find that a specific system (like the Combat Processor) is causing a cache-miss bottleneck that prevents you from reaching your entity count goals.
+
 ---
+
+### Use Case: 5000 Entities
+
+When scaling to 5,000 entities, the performance difference between your current **Structure-of-Arrays (SoA)** and the proposed **Array-of-Structures (AoS)** (`MovementComponent`) is primarily a trade-off between **Cache Locality** and **Data-Processing Efficiency**.
+
+Here is how they compare at scale:
+
+### The Verdict for 5,000 Entities
+
+For a game engine with 5,000 entities, **the bottleneck is rarely the raw layout (SoA vs AoS), but rather the total amount of memory being touched per frame.**
+
+* **Stay with SoA if:** Your primary goal is maximum FPS and you are willing to manage the complexity of keeping many arrays in sync. This is the "high-performance" choice used in games like *Factorio* or *RimWorld*.
+* **Move to AoS (`MovementComponent`) if:** You want to evolve your engine’s feature set (steering, pathfinding, combat). The productivity gain from having cleaner code far outweighs the minor cache efficiency cost at 5,000 entities. Modern CPUs are excellent at pre-fetching memory; as long as you iterate linearly (`for` loop), the performance difference between SoA and AoS will be negligible at this scale.
+
+### 1. What are you using right now (SoA)?
+
+Based on `MovementBuffers.cs` and `MovementSystem.cs`, your movement logic currently relies on these specific variables:
+
+* **`Transforms` (`Transform2D[]`)**: Your primary position data (The "Where").
+* **`Velocities` (`Vector2[]`)**: The direction and magnitude of movement (The "Intent").
+* **`Speeds` (`float[]`)**: A multiplier for velocity (The "Constraint").
+* **`Active` (`bool[]`)**: The participation mask for your loops.
+* **`LastPositions`** / **`HasLastPosition`**: Used for collision resolution to revert invalid moves.
+
+Your `MovementSystem.Update` currently pulls these as separate `Span<T>` buffers.
+
+### 2. Is AoS (`MovementComponent`) worth it?
+
+#### The "Yes" (Why AoS wins on Architecture):
+
+* **Reduced Complexity**: Your `EngineDriver.Tick()` loop currently passes 5+ separate buffers into `MovementSystem` and `CollisionSystem`. A `MovementComponent` would turn these into a single `Span<MovementComponent>`, cleaning up your driver significantly.
+* **Feature Expansion**: You mentioned wanting to implement steering behaviors. If you add `Acceleration` and `Friction` to a `MovementComponent`, those variables will always be bundled with the entity's velocity. In your current SoA setup, you would have to create *two new global arrays* (`Accelerations[]`, `Frictions[]`) and update every system to pass them around.
+
+#### The "No" (Why your current SoA is strong):
+
+* **Cache Locality**: You are currently operating at a scale where cache efficiency is king. Your `MovementSystem` is incredibly fast because it *only* loads the `Transform`, `Velocity`, and `Speed` memory into the CPU cache. It doesn't waste bandwidth loading variables it doesn't need for that specific pass.
+* **Zero-Overhead**: Your code is already working and highly optimized for your current tick loop.
+
+### 3. My Recommendation
+
+* Use **SoA** if performance is your absolute #1 priority.
+* If you are feeling the pain of "Argument Sprawl" (where every function signature has 7+ parameters), **implement the AoS `MovementComponent`**. The loss in minor cache efficiency at 5,000 entities is almost always worth the massive gain in code readability and the ability to easily add new movement features like friction or acceleration.
+ * Refactor to the `MovementComponent` struct. At 5,000 entities, your CPU can easily handle the minor cache footprint of the struct, and the resulting code will be vastly easier to debug and extend as you add more complex systems.
+* **If you want the best of both worlds**: You can keep your `Transform2D` in its own array (because *every* system needs it), but bundle your **per-entity movement stats** (`Velocity`, `Speed`, `Acceleration`, `Friction`) into a `MovementComponent` struct.
+
+
+### How to decide based on your roadmap:
+
+If your next step is **Steering Behaviors** (as mentioned in your `movement.md`), **definitely move to the `MovementComponent` AoS**. Steering behaviors require constant access to `Acceleration`, `MaxSpeed`, and `Friction` simultaneously. If you keep these in separate arrays, your code will become extremely difficult to manage as those systems grow in complexity.
+
+**Does your current `EngineDriver` feel bloated with the current parameter passing, or is it still manageable for you to add one or two more arrays to the system?**
+
+* * *
 
 # `for` over `foreach`
 

@@ -285,25 +285,19 @@ If your game is not currently lagging, stick with the **Reflection-Caching** you
 
 Does knowing that you are currently at "99% speed" make you feel better about staying with the current approach, or does the idea of "100% speed" via code generation appeal to your need for perfection?
 
-* * *
-
-### 3. Layered Architecture
+### Layered Architecture
 
 You have built a system that uses **multiple patterns at different levels**. Here is your current stack:
 
 1. **Bottom Layer (Memory Layout): Contiguous Arrays**
-* *Why?* To give the CPU cache-friendly data.
-* *Status:* You are using arrays internally within your Registries.
-
-
+    * *Why?* To give the CPU cache-friendly data.
+    * *Status:* You are using arrays internally within your Registries.
 2. **Middle Layer (Management): Registry Pattern (ECS style)**
-* *Why?* To abstract the array indices and handle lifecycle management (add/remove entities).
-* *Status:* This is your `EntityRegistry` and `MetadataRegistry`.
-
-
+    * *Why?* To abstract the array indices and handle lifecycle management (add/remove entities).
+    * *Status:* This is your `EntityRegistry` and `MetadataRegistry`.
 3. **Top Layer (Communication): Adapter/DTO Pattern**
-* *Why?* To decouple your high-performance memory layout from your UI.
-* *Status:* This is your `CharacterViewAdapter` and `CharacterSheetDto`.
+    * *Why?* To decouple your high-performance memory layout from your UI.
+    * *Status:* This is your `CharacterViewAdapter` and `CharacterSheetDto`.
 
 * * *
 

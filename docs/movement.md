@@ -29,12 +29,6 @@ You have already built the "chassis." To finalize the high-performance setup, en
 * **Data-Driven Behavior:** Transition from "Hardcoded Velocity" to "Force/Impulse" logic. This will allow NPCs to support steering behaviors (Seek, Flee, Separate) by simply modifying their `Behavior` data, rather than changing system code.
 
 
-### What was removed (The "Why"):
-
-* **Redundant Explanations:** I removed the detailed reasoning behind *why* O(N^2) is bad, assuming that since you've already implemented the grid, you already understand the performance benefit.
-* **Conversational Fillers:** I replaced instructional language ("you should focus on...") with direct statements of current architectural goals.
-* **Structural Repetition:** I merged the "Checklist" and "System Expansion" sections, as they both pointed to the same operational requirements.
-
 
 # Basics
 
