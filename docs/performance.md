@@ -34,6 +34,12 @@ These are types that the .NET Garbage Collector (GC) must track.
 * **The Concept:** A sequential buffer of transactional "intent" objects that decouples the *request* for a state change from its *execution*.
 * **Why it matters for Performance:** In an ECS, you never want logic systems to mutate packed memory buffers directly, as this causes cache thrashing and race conditions. By enqueuing a `GameCommand` struct, you store the *intent* to change data in a cache-friendly queue, allowing the `EngineDriver` to batch these mutations safely during a single, deterministic window in the frame tick.
 
+### Data Access Patterns
+
+* **Viewports (`Span<T>` / `ReadOnlySpan<T>`):** The primary mechanism for processing "Packed Structs" and "Performance Buffers." They provide safe, high-speed iteration over memory without creating copies or heap allocations.
+* **Direct Access:** Used for "Logic/Metadata" (objects/classes) where the overhead of `Span` is unnecessary or unsupported (e.g., non-blittable types).
+* **Pass-by-Reference (`ref` / `in`):** The optimization layer for method arguments. It ensures that large structs (like your `MovementComponent`) are accessed via memory address rather than being copied onto the stack, preventing hidden performance degradation.
+
 ### Data Categories
 
 * **Logic/Metadata:** Data containing `string`, `class`, or `List`. It is managed and safe. It should not be forced into manual memory layouts.
@@ -45,6 +51,54 @@ These are types that the .NET Garbage Collector (GC) must track.
 
 
 ## 2. Decision Matrix
+
+### Data access patterns
+
+| Strategy | Semantics | Performance Impact | Usage Goal |
+| --- | --- | --- | --- |
+| **Pass-by-Value** | Copies data to stack | High (for large structs) | Small, simple types (`int`, `float`) |
+| **`in`** | Pass by reference (Read-only) | Low (no copy) | Large immutable structs |
+| **`ref`** | Pass by reference (Read/Write) | Low (no copy) | Modifying structs in-place |
+| **`Span<T>`** | Ref-struct "View" of memory | Zero-copy/Zero-alloc | Processing array/buffer ranges |
+| **`ReadOnlySpan<T>`** | Read-only "View" of memory | Zero-copy/Zero-alloc | Safe, read-only iteration |
+
+#### How to use them together in your systems
+
+The power of this architecture comes from combining the **View** (`Span`) with the **Access Modifier** (`ref`). This is how you should structure your `MovementSystem` to hit your performance targets for 5,000 entities:
+
+```csharp
+// Use Span for the collection view, and ref for the individual element access
+public static void Update(Span<MovementComponent> components, float deltaTime)
+{
+    // 1. Span allows safe, bounds-checked iteration over the buffer
+    for (int i = 0; i < components.Length; i++)
+    {
+        // 2. 'ref' allows direct, zero-copy access to the component in memory
+        ref var comp = ref components[i]; 
+
+        if (!comp.Active) continue;
+
+        comp.Transform.Origin += comp.Velocity * comp.Speed * deltaTime;
+    }
+}
+
+```
+
+#### Key distinctions for your Style Guide:
+
+1. **`Span<T>` vs. `in`/`ref`:**
+* Use `Span<T>` as the **argument type** for your system methods (instead of passing raw `T[]` arrays).
+* Use `ref` or `in` as the **access method** *inside* the loop when you are interacting with individual items *within* that span.
+
+
+2. **Why `ReadOnlySpan<T>`?**
+* If a system (like your `SpatialGridSystem`) only needs to read positions without ever changing them, **always** use `ReadOnlySpan<T>`. This is a massive "hint" to the compiler that it can optimize memory access for read-only patterns, and it acts as a safeguard against accidental state mutation.
+
+
+
+Integrating these into your matrix defines a complete "High-Performance API" layer for your engine. Does this feel like a sufficient set of rules for your `EngineDriver` to enforce?
+
+### Data Categories
 
 | Strategy | When to use | Keywords | Safety | Memory Control | Complexity |
 | --- | --- | --- | --- | --- | --- |
