@@ -12,7 +12,7 @@ This separation keeps the simulation **deterministic**, **platform-agnostic**, a
 - **NPCs/Systems**: Transactional `CommandQueue` for safety and batch processing.
 
 **Current Implementation** (from source):
-- Basic Euler integration in `MovementSystem`.
+- Basic Euler integration in `MovementSystem` (pos += vel * speed * deltaTime).
 - SoA buffers for cache efficiency.
 - Post-movement spatial grid rebuild + collision validation.
 

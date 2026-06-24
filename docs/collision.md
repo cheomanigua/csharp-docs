@@ -195,3 +195,211 @@ The `IDProvider` is the **Generator**, and the `EntityRegistry` is the **Consume
 ### Important Warning for your Hybrid Strategy:
 
 Since your C# system handles IDs up to `MaxEntityCapacity`, ensure that **no part of your code** accidentally assigns an `entityId` larger than 1023, or you will trigger an `IndexOutOfRangeException` across your entire architecture.
+
+## 8. Godot Integration
+
+We can use a combination of custom C# collision implementation and Godot `PhysicsServer2D` solution. There are three possibles architectures:
+
+### 8.1. Custom Dynamic Collision + Physics Queries
+
+Dynamic collisions are entirely owned by your C# simulation. `PhysicsServer2D` is used only for static-world queries.
+
+Avoid using Godot's physics engine for dynamic entity collisions when simulating thousands of simple objects such as bullets or swarm agents. Instead, keep all dynamic collision detection and resolution inside your C# simulation, using `PhysicsServer2D` only for queries against the static world.
+
+This approach maximizes performance by keeping your simulation fully data-oriented and avoiding any dynamic physics state inside Godot.
+
+#### Dynamic-vs-Dynamic
+
+Implement both the broadphase and narrowphase yourself:
+
+* Use a **Spatial Grid** to partition entities.
+* Perform collision checks using simple C# math (circle-circle, AABB-AABB, capsule overlap, etc.).
+* Update gameplay state directly in your ECS/DOD model.
+
+No `Area2D`, `RigidBody2D`, or dynamic `PhysicsServer2D` objects are required.
+
+#### Dynamic-vs-Static
+
+Use `PhysicsServer2D` only as a query system:
+
+* Raycasts
+* Shape intersection tests
+* Terrain or wall queries
+
+The static world remains inside Godot's physics engine, while dynamic entities remain pure C# data.
+
+#### Hybrid Rule
+
+| Collision Type     | Implementation                     |
+| ------------------ | ---------------------------------- |
+| Dynamic-vs-Dynamic | Spatial Grid + Custom C# Collision |
+| Dynamic-vs-Static  | `PhysicsServer2D` Queries          |
+
+#### Why use this?
+
+* Maximum performance
+* Cache-friendly DOD design
+* Ideal for bullets, swarms, and simple hitboxes
+* No synchronization overhead with physics objects
+
+
+### 8.2. Spatial Grid Broadphase + PhysicsServer2D Narrowphase
+
+Dynamic entities are still owned by your C# simulation, but `PhysicsServer2D` is used as the narrowphase collision engine for precise geometry tests.
+
+When dynamic entities require more sophisticated collision geometry, keep entity ownership and broadphase culling inside your C# simulation, but delegate the precise collision tests to PhysicsServer2D.
+
+In this architecture, Godot does not own or simulate your entities. It acts purely as a native geometry engine that performs the expensive collision math for the candidate pairs identified by your Spatial Grid.
+
+#### Broadphase
+
+Implement a **Spatial Grid** inside your C# model.
+
+Each frame:
+
+* Insert entities into grid cells.
+* Find nearby candidate pairs.
+* Discard entities that are obviously too far apart.
+
+This keeps the complexity close to O(N).
+
+#### Narrowphase
+
+For the candidate pairs produced by the grid:
+
+* Query `PhysicsServer2D`
+* Perform exact shape intersection tests
+* Retrieve overlap information, normals, or penetration depth
+* Apply the results back to your C# transforms
+
+You are not using Godot to manage physics objects, you are using it only as a high-performance native collision solver.
+
+#### Hybrid Rule
+
+| Collision Type     | Implementation                               |
+| ------------------ | -------------------------------------------- |
+| Dynamic-vs-Dynamic | Spatial Grid + `PhysicsServer2D` Narrowphase |
+| Dynamic-vs-Static  | `PhysicsServer2D` Queries                    |
+
+#### Why use this?
+
+* Supports complex shapes
+* Uses Godot's optimized C++ geometry code
+* Keeps gameplay logic in C#
+* Avoids thousands of physics nodes
+
+### 8.3. Mixed Narrowphase (Custom + PhysicsServer2D)
+
+Dynamic entities are owned entirely by your C# simulation, but the narrowphase collision system is chosen per entity type. Simple entities use custom collision math for maximum performance, while complex entities delegate precise geometry tests to `PhysicsServer2D`.
+
+This architecture combines the strengths of **8.1** and **8.2**. It keeps the simulation data-oriented and cache-friendly while avoiding the complexity of implementing advanced collision algorithms for irregular shapes.
+
+The goal is not to use a single collision system for everything, but to use the most appropriate collision solver for each class of entity.
+
+#### Broadphase
+
+Implement a single **Spatial Grid** inside your C# model.
+
+Each frame:
+
+* Insert all dynamic entities into the grid.
+* Identify nearby candidate pairs.
+* Discard obviously non-overlapping entities.
+
+This broadphase remains identical regardless of the collision shape.
+
+#### Narrowphase
+
+Choose the collision solver according to the entity type:
+
+#### Simple Shapes
+
+Use custom C# collision code:
+
+* Circle-vs-Circle
+* Circle-vs-AABB
+* AABB-vs-AABB
+* Capsule-vs-Capsule (optional)
+
+These tests are extremely fast and require no interaction with Godot.
+
+#### Complex Shapes
+
+Delegate collision checks to `PhysicsServer2D`:
+
+* Convex polygons
+* Rotated hitboxes
+* Multi-shape enemies
+* Boss hurtboxes
+* Irregular collision geometry
+
+Use `PhysicsServer2D` as a geometry service:
+
+* Perform exact shape intersection tests
+* Retrieve penetration depth and normals
+* Apply the results back to your ECS/DOD data
+
+Godot does not own or simulate these entities. It only performs the expensive geometry calculations.
+
+#### Dynamic-vs-Static
+
+Use `PhysicsServer2D` queries for:
+
+* Terrain collisions
+* Walls
+* Obstacles
+* Raycasts
+* Static shape intersections
+
+The static world remains inside Godot's physics engine, while all dynamic entities remain pure C# data.
+
+#### Hybrid Rule
+
+| Collision Type             | Implementation                               |
+| -------------------------- | -------------------------------------------- |
+| Simple Dynamic-vs-Dynamic  | Spatial Grid + Custom C# Collision           |
+| Complex Dynamic-vs-Dynamic | Spatial Grid + `PhysicsServer2D` Narrowphase |
+| Dynamic-vs-Static          | `PhysicsServer2D` Queries                    |
+
+#### Example
+
+| Entity        | Collision Strategy            |
+| ------------- | ----------------------------- |
+| Bullets       | Custom Circle Collision       |
+| Swarm Enemies | Custom Circle Collision       |
+| Pickups       | Custom AABB Collision         |
+| Boss          | `PhysicsServer2D` Narrowphase |
+| Shield        | `PhysicsServer2D` Narrowphase |
+| Terrain       | `PhysicsServer2D` Queries     |
+
+#### Why use this?
+
+* Maximum performance for the majority of entities.
+* Complex shapes require no custom SAT/GJK implementation.
+* Keeps the ECS/DOD simulation pure and cache-friendly.
+* Avoids thousands of `Area2D` or `RigidBody2D` nodes.
+* Scales naturally as the game's collision requirements grow.
+
+
+### Comparison
+
+| Feature            |                 8.1 |                  8.2 |                                             8.3 |
+| ------------------ | ------------------: | -------------------: | ----------------------------------------------: |
+| Broadphase         |        Spatial Grid |         Spatial Grid |                                    Spatial Grid |
+| Narrowphase        |           Custom C# |    `PhysicsServer2D` |                                           Mixed |
+| Circle collisions  |           Excellent |            Excellent |                                       Excellent |
+| Polygon collisions |           Difficult |            Excellent |                                       Excellent |
+| Complex hitboxes   |           Difficult |            Excellent |                                       Excellent |
+| Performance        |             Fastest |      Slightly slower |                                        Near 8.1 |
+| Flexibility        |            Moderate |                 High |                                         Highest |
+| Typical use        | Bullet hell, swarms | Complex enemy shapes | Mixed games with simple mobs and complex bosses |
+
+### Cheatsheet: When to use each
+
+| Architecture | Dynamic Collision                              | Static Collision |
+| ------------ | ---------------------------------------------- | ---------------- |
+| **8.1**      | All custom C#                                  | PhysicsServer2D  |
+| **8.2**      | All PhysicsServer2D narrowphase                | PhysicsServer2D  |
+| **8.3**      | Custom C# for simple (circle, AABB), PhysicsServer2D for complex | PhysicsServer2D  |
+
+I would actually consider **8.3 the recommended default architecture for most ECS/DOD games**. Most entities (bullets, mobs, pickups) stay on the ultra-fast custom path, while only a handful of complex entities (bosses, shields, multipart enemies) use `PhysicsServer2D` for precise collision geometry. This gives you almost all the performance of **8.1** with much of the flexibility of **8.2**.

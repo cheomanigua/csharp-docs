@@ -24,44 +24,6 @@ Why this is the correct architectural path
     * [Transform2D](https://docs.godotengine.org/en/stable/classes/class_transform2d.html)
     * [PhysicsServer2D](https://docs.godotengine.org/en/stable/classes/class_physicsserver2d.html)
 
-### 2A. Collisions: Spatial Grid vs. PhysicsServer2D
-
-A common architectural trap is attempting to use Godot’s physics bodies for high-density entities (like bullets or swarms). Instead, adopt a hybrid collision model:
-
-#### The DOD Alternative: Spatial Grid Partitioning
-
-For high-density dynamic entities (e.g., bullets, swarm enemies), implement a **Spatial Grid** inside your C# `Model`.
-
-* **Why:** `PhysicsServer2D` overhead grows significantly with thousands of dynamic objects due to transformation syncing and collision state management. A Spatial Grid is a pure data-oriented structure ($O(N)$ complexity) that runs entirely in your CPU cache-friendly loops.
-* **How:** Divide your world into a grid. Each frame, map `EntityIDs` to their respective grid cells. When resolving collisions, you only check entities within the same or adjacent cells.
-
-#### The Hybrid Rule
-
-| Collision Type | Use Case | Recommended Implementation |
-| --- | --- | --- |
-| **Dynamic-vs-Dynamic** | Bullets, Swarm Enemies | **C# Spatial Grid** (Custom logic) |
-| **Dynamic-vs-Static** | Walls, Obstacles | **Godot `PhysicsServer2D`** (Query-only) |
-
-
-### 2B. Collisions: Spatial Grid + PhysicsServer2D
-
-A common architectural trap is attempting to use Godot’s physics bodies as persistent scene objects for high-density simulations (like swarms or bullets). Instead, treat the `PhysicsServer2D` as a high-performance **Geometry Service** managed by a custom **Spatial Broadphase**.
-
-#### The Hybrid Pipeline
-
-For high-density dynamic entities, resolve collisions using a two-tier approach:
-
-* **Broadphase (Spatial Grid):** Implement a `SpatialGrid` inside your C# `Model` to partition your entities. This **O(N)** filter rapidly identifies small, local candidate groups that *might* be colliding, preventing the overhead of sending every entity to the physics engine.
-* **Narrowphase (PhysicsServer2D):** For the candidate groups identified by the grid, query the `PhysicsServer2D` to perform precise geometry intersection tests. You are using the server as a "Headless Math Engine"—it performs the complex collision math in native C++ and returns the resolution data, which you then apply back to your C# `Transforms`.
-
-#### The Hybrid Rule
-
-| Collision Type | Use Case | Recommended Implementation |
-| --- | --- | --- |
-| **Dynamic-vs-Dynamic** | Horde, Bullets | **Spatial Grid** (Broadphase) + **PhysicsServer2D** (Narrowphase) |
-| **Dynamic-vs-Static** | Walls, Terrain | **PhysicsServer2D** (Direct Query) |
-
-* **Why this works:** You keep your logic pure and data-oriented in C#, minimizing the sync overhead by only offloading the "math-heavy" collision checks to the `PhysicsServer2D` when necessary. This allows you to handle thousands of entities while leveraging Godot’s industrial-grade geometry solvers.
 
 
 ### 3. High-Performance Rendering (GPU Instancing)
