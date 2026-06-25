@@ -15,6 +15,8 @@ The custom system is designed for massive scale, targeting objects that require 
 * **Projectiles**: High-speed entities that require per-frame position checking and immediate removal upon impact.
 * **Particles**: Short-lived entities that need to react to the environment or each other without triggering expensive engine callbacks.
 
+For that , the math models use **Circle** collision and **AABB** collision.
+
 ## 3. Collision Math Models
 
 To ensure throughput, we utilize two primary geometric primitives chosen for their computational efficiency:
@@ -24,6 +26,82 @@ To ensure throughput, we utilize two primary geometric primitives chosen for the
     2. If `Distance == RadiusA + RadiusB`: The circles are perfectly touching (kissing).
     3. If `Distance > RadiusA + RadiusB`: The circles are separated.
 * **AABB (Axis-Aligned Bounding Box) Collision**: Utilized for static or non-rotating assets. It compares the minimum and maximum X/Y coordinates of two rectangles, offering extremely high performance for axis-aligned geometry.
+    1. If the rectangles overlap on both the X axis and the Y axis: The AABBs are overlapping.
+    2. If the rectangles touch exactly along an edge or corner: The AABBs are perfectly touching.
+    3. If the rectangles are separated on either the X axis or the Y axis: The AABBs are separated.
+
+### Code implementation
+
+If we have this helper class with overloaded methods:
+
+```csharp
+using System.Numerics;
+using System.Runtime.CompilerServices;
+
+namespace Source.Core.Math;
+
+public static class CollisionMath
+{
+    // Circle-Circle Test: Fast squared distance comparison
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsOverlapping(Vector2 posA, float radiusA, Vector2 posB, float radiusB)
+    {
+        float dx = posA.X - posB.X;
+        float dy = posA.Y - posB.Y;
+        float distanceSquared = dx * dx + dy * dy;
+        float radiusSum = radiusA + radiusB;
+        
+        return distanceSquared < (radiusSum * radiusSum);
+    }
+
+    // AABB-AABB Test: Classic overlap check for rectangular bounds
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsOverlapping(Vector2 posA, Vector2 halfSizeA, Vector2 posB, Vector2 halfSizeB)
+    {
+        return
+            MathF.Abs(posA.X - posB.X) < (halfSizeA.X + halfSizeB.X) &&
+            MathF.Abs(posA.Y - posB.Y) < (halfSizeA.Y + halfSizeB.Y);
+    }
+
+    // Circle vs AABB Test
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsOverlapping(Vector2 circlePos, float radius, Vector2 boxPos, Vector2 halfSize)
+    {
+        float dx = MathF.Max(MathF.Abs(circlePos.X - boxPos.X) - halfSize.X, 0);
+        float dy = MathF.Max(MathF.Abs(circlePos.Y - boxPos.Y) - halfSize.Y, 0);
+    
+        return dx * dx + dy * dy <= radius * radius;
+    }
+}
+```
+
+The implementation would be:
+
+#### Circle vs Circle
+
+```csharp
+bool colliding = CollisionMath.IsOverlapping(
+    transforms[i].Origin, Radius,
+    transforms[j].Origin, Radius);
+```
+
+#### AABB vs AABB
+
+```csharp
+bool colliding = CollisionMath.IsOverlapping(
+    transforms[i].Origin, halfSize,
+    transforms[j].Origin, halfSize);
+```
+
+#### Circle vs AABB
+
+```csharp
+bool colliding = CollisionMath.IsOverlapping(
+    transforms[i].Origin, Radius,
+    transforms[j].Origin, halfSize);
+```
+
+The three implementations are not mutually exclusive. They can be used together at the same time.
 
 ### Collision Methodology Reference
 
@@ -36,7 +114,7 @@ To ensure throughput, we utilize two primary geometric primitives chosen for the
 
 The system leverages data-oriented design patterns to ensure the CPU remains cache-friendly and garbage-collector-free:
 
-* **Spatial Grid**: A partitioning system that divides the world into a grid of cells. Entities register their position in cells, allowing each entity to query only the 8 adjacent cells for potential collisions, reducing complexity from $O(N^2)$ to near $O(N)$.
+* **Spatial Grid**: A partitioning system that divides the world into a grid of cells. Entities register their position in cells, allowing each entity to query only the 8 adjacent cells for potential collisions, reducing complexity from O(N^2) to near O(N).
 * **`Span<T>`** & **`ArrayPool<T>`**: We utilize stack-allocated `Span<T>` views and rented arrays from `ArrayPool` to avoid heap allocations. This ensures zero-allocation physics ticks, preventing GC spikes.
 * **Active Masking (`activeMask`)**: A bitmask or boolean array used to flag entities as active or inactive. This allows the system to skip processing for despawned or idle entities, drastically reducing the number of loop iterations per frame.
 

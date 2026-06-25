@@ -40,9 +40,9 @@ Character assembly occurs in four distinct phases:
 **`skills.json`**
 ```
 {
-  "1": { "Name": "OneHandedWeapons", "AttributeScale": "Strength" },
-  "2": { "Name": "Archery", "AttributeScale": "Strength" },
-  "3": { "Name": "Illusion", "AttributeScale": "Intelligence" }
+  "OneHandedWeapons": { "AttributeScale": "Strength" },
+  "Archery": { "AttributeScale": "Strength" },
+  "Illusion": { "AttributeScale": "Intelligence" }
 }
 ```
 A **Human Wizard** will be build with `Health: 80`, `Mana: 120`, `Strength: 7`, `Intelligence: 20`, `Primary Skill: Illusion`
