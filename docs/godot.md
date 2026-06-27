@@ -23,6 +23,7 @@ Why this is the correct architectural path
 - Godot Documentation:
     * [Transform2D](https://docs.godotengine.org/en/stable/classes/class_transform2d.html)
     * [PhysicsServer2D](https://docs.godotengine.org/en/stable/classes/class_physicsserver2d.html)
+    * [PhysicsDirectSpaceState2D](https://docs.godotengine.org/en/stable/classes/class_physicsdirectspacestate2d.html)
 
 
 

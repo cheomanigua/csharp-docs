@@ -276,6 +276,6 @@ Your custom project isn't just using these keywords superficially—they form th
 | Feature | Where it lives in your project | What it eliminates |
 | --- | --- | --- |
 | **`struct`** | All components (`Core.cs`) | Eliminates Heap Fragmentation & GC Spikes |
-| **`ref` / `in**` | Systems & Component Lookups (`Systems.cs`) | Eliminates Struct Copying Overhead |
+| **`ref` / `in`** | Systems & Component Lookups (`Systems.cs`) | Eliminates Struct Copying Overhead |
 | **`ReadOnlySpan<T>`** | Main Simulation Frame Loop View Render (`Program.cs`) | Eliminates Array Exposure Risks with 0% Performance Loss |
 | **`Explicit Layout`** | *Ready for your high-density NPC/Simulation logic* | Eliminates RAM bloat via physical data overlapping |

@@ -321,11 +321,14 @@ The static world remains inside Godot's physics engine, while dynamic entities r
 * No synchronization overhead with physics objects
 
 
-### 8.2. Spatial Grid Broadphase + PhysicsServer2D Narrowphase
 
-Dynamic entities are still owned by your C# simulation, but `PhysicsServer2D` is used as the narrowphase collision engine for precise geometry tests.
+### 8.2. Spatial Grid Broadphase + PhysicsDirectSpaceState2D Narrowphase
 
-When dynamic entities require more sophisticated collision geometry, keep entity ownership and broadphase culling inside your C# simulation, but delegate the precise collision tests to PhysicsServer2D.
+The narrowphase delegation has been updated to use `PhysicsDirectSpaceState2D`, as this is the correct interface for performing geometric queries against the physics world.
+
+Dynamic entities are still owned by your C# simulation, but `PhysicsDirectSpaceState2D` is used as the narrowphase collision engine for precise geometry tests.
+
+When dynamic entities require more sophisticated collision geometry, keep entity ownership and broadphase culling inside your C# simulation, but delegate the precise collision tests to `PhysicsDirectSpaceState2D`.
 
 In this architecture, Godot does not own or simulate your entities. It acts purely as a native geometry engine that performs the expensive collision math for the candidate pairs identified by your Spatial Grid.
 
@@ -345,30 +348,33 @@ This keeps the complexity close to O(N).
 
 For the candidate pairs produced by the grid:
 
-* Query `PhysicsServer2D`
-* Perform exact shape intersection tests
-* Retrieve overlap information, normals, or penetration depth
-* Apply the results back to your C# transforms
+* Query `PhysicsDirectSpaceState2D`.
+* Perform exact shape intersection tests.
+* Retrieve overlap information, normals, or penetration depth.
+* Apply the results back to your C# transforms.
 
 You are not using Godot to manage physics objects, you are using it only as a high-performance native collision solver.
 
 #### Hybrid Rule
 
-| Collision Type     | Implementation                               |
-| ------------------ | -------------------------------------------- |
-| Dynamic-vs-Dynamic | Spatial Grid + `PhysicsServer2D` Narrowphase |
-| Dynamic-vs-Static  | `PhysicsServer2D` Queries                    |
+| Collision Type | Implementation |
+| --- | --- |
+| Dynamic-vs-Dynamic | Spatial Grid + `PhysicsDirectSpaceState2D` Narrowphase |
+| Dynamic-vs-Static | `PhysicsDirectSpaceState2D` Queries |
 
 #### Why use this?
 
-* Supports complex shapes
-* Uses Godot's optimized C++ geometry code
-* Keeps gameplay logic in C#
-* Avoids thousands of physics nodes
+* Supports complex shapes.
+* Uses Godot's optimized C++ geometry code.
+* Keeps gameplay logic in C#.
+* Avoids thousands of physics nodes.
 
-### 8.3. Mixed Narrowphase (Custom + PhysicsServer2D)
 
-Dynamic entities are owned entirely by your C# simulation, but the narrowphase collision system is chosen per entity type. Simple entities use custom collision math for maximum performance, while complex entities delegate precise geometry tests to `PhysicsServer2D`.
+### 8.3. Mixed Narrowphase (Custom + PhysicsDirectSpaceState2D)
+
+The term `PhysicsServer2D` has been updated to `PhysicsDirectSpaceState2D` where appropriate, as this is the correct interface for performing geometric queries.
+
+Dynamic entities are owned entirely by your C# simulation, but the narrowphase collision system is chosen per entity type. Simple entities use custom collision math for maximum performance, while complex entities delegate precise geometry tests to `PhysicsDirectSpaceState2D`.
 
 This architecture combines the strengths of **8.1** and **8.2**. It keeps the simulation data-oriented and cache-friendly while avoiding the complexity of implementing advanced collision algorithms for irregular shapes.
 
@@ -403,7 +409,7 @@ These tests are extremely fast and require no interaction with Godot.
 
 #### Complex Shapes
 
-Delegate collision checks to `PhysicsServer2D`:
+Delegate collision checks to `PhysicsDirectSpaceState2D`:
 
 * Convex polygons
 * Rotated hitboxes
@@ -411,7 +417,7 @@ Delegate collision checks to `PhysicsServer2D`:
 * Boss hurtboxes
 * Irregular collision geometry
 
-Use `PhysicsServer2D` as a geometry service:
+Use `PhysicsDirectSpaceState2D` as a geometry service:
 
 * Perform exact shape intersection tests
 * Retrieve penetration depth and normals
@@ -421,7 +427,7 @@ Godot does not own or simulate these entities. It only performs the expensive ge
 
 #### Dynamic-vs-Static
 
-Use `PhysicsServer2D` queries for:
+Use `PhysicsDirectSpaceState2D` queries for:
 
 * Terrain collisions
 * Walls
@@ -433,22 +439,22 @@ The static world remains inside Godot's physics engine, while all dynamic entiti
 
 #### Hybrid Rule
 
-| Collision Type             | Implementation                               |
-| -------------------------- | -------------------------------------------- |
-| Simple Dynamic-vs-Dynamic  | Spatial Grid + Custom C# Collision           |
-| Complex Dynamic-vs-Dynamic | Spatial Grid + `PhysicsServer2D` Narrowphase |
-| Dynamic-vs-Static          | `PhysicsServer2D` Queries                    |
+| Collision Type | Implementation |
+| --- | --- |
+| Simple Dynamic-vs-Dynamic | Spatial Grid + Custom C# Collision |
+| Complex Dynamic-vs-Dynamic | Spatial Grid + `PhysicsDirectSpaceState2D` |
+| Dynamic-vs-Static | `PhysicsDirectSpaceState2D` Queries |
 
 #### Example
 
-| Entity        | Collision Strategy            |
-| ------------- | ----------------------------- |
-| Bullets       | Custom Circle Collision       |
-| Swarm Enemies | Custom Circle Collision       |
-| Pickups       | Custom AABB Collision         |
-| Boss          | `PhysicsServer2D` Narrowphase |
-| Shield        | `PhysicsServer2D` Narrowphase |
-| Terrain       | `PhysicsServer2D` Queries     |
+| Entity | Collision Strategy |
+| --- | --- |
+| Bullets | Custom Circle Collision |
+| Swarm Enemies | Custom Circle Collision |
+| Pickups | Custom AABB Collision |
+| Boss | `PhysicsDirectSpaceState2D` |
+| Shield | `PhysicsDirectSpaceState2D` |
+| Terrain | `PhysicsDirectSpaceState2D` |
 
 #### Why use this?
 
@@ -458,26 +464,25 @@ The static world remains inside Godot's physics engine, while all dynamic entiti
 * Avoids thousands of `Area2D` or `RigidBody2D` nodes.
 * Scales naturally as the game's collision requirements grow.
 
-
 ### Comparison
 
-| Feature            |                 8.1 |                  8.2 |                                             8.3 |
-| ------------------ | ------------------: | -------------------: | ----------------------------------------------: |
-| Broadphase         |        Spatial Grid |         Spatial Grid |                                    Spatial Grid |
-| Narrowphase        |           Custom C# |    `PhysicsServer2D` |                                           Mixed |
-| Circle collisions  |           Excellent |            Excellent |                                       Excellent |
-| Polygon collisions |           Difficult |            Excellent |                                       Excellent |
-| Complex hitboxes   |           Difficult |            Excellent |                                       Excellent |
-| Performance        |             Fastest |      Slightly slower |                                        Near 8.1 |
-| Flexibility        |            Moderate |                 High |                                         Highest |
-| Typical use        | Bullet hell, swarms | Complex enemy shapes | Mixed games with simple mobs and complex bosses |
+| Feature | 8.1 | 8.2 | 8.3 |
+| --- | --- | --- | --- |
+| Broadphase | Spatial Grid | Spatial Grid | Spatial Grid |
+| Narrowphase | Custom C# | `PhysicsDirectSpaceState2D` | Mixed (Custom + `PhysicsDirectSpaceState2D`) |
+| Circle collisions | Excellent | Excellent | Excellent |
+| Polygon collisions | Difficult | Excellent | Excellent |
+| Complex hitboxes | Difficult | Excellent | Excellent |
+| Performance | Fastest | Slightly slower | Near 8.1 |
+| Flexibility | Moderate | High | Highest |
+| Typical use | Bullet hell, swarms | Complex enemy shapes | Mixed games with simple mobs and complex bosses |
 
 ### Cheatsheet: When to use each
 
-| Architecture | Dynamic Collision                              | Static Collision |
-| ------------ | ---------------------------------------------- | ---------------- |
-| **8.1**      | All custom C#                                  | PhysicsServer2D  |
-| **8.2**      | All PhysicsServer2D narrowphase                | PhysicsServer2D  |
-| **8.3**      | Custom C# for simple (circle, AABB), PhysicsServer2D for complex | PhysicsServer2D  |
+| Architecture | Dynamic Collision | Static Collision |
+| --- | --- | --- |
+| **8.1** | All custom C# | PhysicsServer2D |
+| **8.2** | All PhysicsDirectSpaceState2D narrowphase | PhysicsServer2D |
+| **8.3** | Custom C# for simple, PhysicsDirectSpaceState2D for complex | PhysicsServer2D |
 
-I would actually consider **8.3 the recommended default architecture for most ECS/DOD games**. Most entities (bullets, mobs, pickups) stay on the ultra-fast custom path, while only a handful of complex entities (bosses, shields, multipart enemies) use `PhysicsServer2D` for precise collision geometry. This gives you almost all the performance of **8.1** with much of the flexibility of **8.2**.
+I would actually consider **8.3 the recommended default architecture for most ECS/DOD games**. Most entities (bullets, mobs, pickups) stay on the ultra-fast custom path, while only a handful of complex entities (bosses, shields, multipart enemies) use `PhysicsDirectSpaceState2D` for precise collision geometry. This gives you almost all the performance of **8.1** with much of the flexibility of **8.2**.
