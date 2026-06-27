@@ -146,7 +146,7 @@ The `in` keyword was explicitly chosen over `ref` for two major reasons: **Inten
 
 ##### 1. Preventing Accidental Modification (Side Effects)
 
-A radar check is a **pure mathematical query**. It answers a true/false question: *"Is Object B close enough to Object A?"* If we used `ref PositionComp targetPos`, the physics or radar loop would have permission to modify the target's physical location. If a programmer accidentally typed a bug inside the radar function like `targetPos.X = 0;`, the target submarine would instantly teleport to coordinates $(0,0)$ on the map simply because its range was checked!
+A radar check is a **pure mathematical query**. It answers a true/false question: *"Is Object B close enough to Object A?"* If we used `ref PositionComp targetPos`, the physics or radar loop would have permission to modify the target's physical location. If a programmer accidentally typed a bug inside the radar function like `targetPos.X = 0;`, the target submarine would instantly teleport to coordinates (0,0) on the map simply because its range was checked!
 
 By using `in`, the compiler enforces a strict safety contract. If anyone tries to modify the position or sensor stats inside the method, the code will fail to compile. It guarantees that a query function remains a query and cannot introduce bugs into your game state.
 

@@ -5,26 +5,15 @@ In C#, **arrays** and **lists** are both used to store collections of items, but
 ## Array (`T[]`)
 - **Definition**: A fixed-size collection of elements of the same type, stored contiguously in memory.
 - **Key Characteristics**:
-  - **Fixed Size**: Size is defined at creation and cannot be changed (e.g., `int[] arr = new int[5];`).
+  - **Fixed Size**: Size is defined at creation and cannot be changed (e.g., `int[] arr = new int[5];`). Use `List<T>` for dynamic sizing.
   - **Performance**: Slightly faster due to fixed size and direct memory access.
   - **Memory**: More memory-efficient for fixed-size data, as it doesn't require overhead for dynamic resizing.
   - **Type Safety**: Strongly typed, elements must be of the declared type.
   - **Usage**: Use when the size of the collection is known and won't change, or when performance is critical.
-  - **Example**:
-    ```csharp
-    int[] numbers = new int[3] { 1, 2, 3 };
-    numbers[0] = 10; // Valid
-    // numbers.Length = 4; // Error: Cannot resize
+  - Arrays are **reference types**, stored on the heap.
+  - Index out-of-bounds errors throw `IndexOutOfRangeException`.
+  - Multidimensional arrays (`[,]`) are rectangular; jagged arrays (`[][]`) allow varying sizes.
 
-    string[] sumer = new string[] { "Ur", "Uruk", "Adab", "Kish", "Lagash", "Larsa", "Umma" };
-	Array.Sort(sumer);
-
-	foreach (string city in sumer)
-	{
-		Console.WriteLine(city);
-	}
-    ```
-In C#, arrays are fixed-size, zero-based collections of elements of the same type. Here’s a concise overview:
 
 ### Declaring and Initializing Arrays
 ```csharp
@@ -32,13 +21,16 @@ In C#, arrays are fixed-size, zero-based collections of elements of the same typ
 int[] numbers;
 
 // Initialize with a fixed size
-numbers = new int[5]; // Array of 5 integers, initialized to 0
+numbers = new int[3]; // Array of 5 integers, initialized to 0
 
 // Initialize with values
-int[] numbers2 = { 1, 2, 3, 4, 5 };
+int[] numbers = { 1, 2, 3 };
 
 // Short syntax for initialization
-int[] numbers3 = new int[] { 1, 2, 3 };
+int[] numbers = new int[] { 1, 2, 3 };
+
+// Fixed size
+numbers.Length = 4; // Error: Cannot resize
 
 // Multidimensional array (2D)
 int[,] matrix = new int[2, 3]; // 2 rows, 3 columns
@@ -47,6 +39,14 @@ int[,] matrix = new int[2, 3]; // 2 rows, 3 columns
 int[][] jagged = new int[3][];
 jagged[0] = new int[] { 1, 2 };
 jagged[1] = new int[] { 3, 4, 5 };
+
+string[] sumer = new string[] { "Ur", "Uruk", "Adab", "Kish", "Lagash", "Larsa", "Umma" };
+Array.Sort(sumer);
+
+foreach (string city in sumer)
+{
+    Console.WriteLine(city);
+}
 ```
 
 ### Accessing Elements
@@ -81,24 +81,18 @@ jagged[0][1] = 2;
 
 ### Iterating Arrays
 ```csharp
-// For loop
+// For loop (faster)
 for (int i = 0; i < numbers.Length; i++)
 {
     Console.WriteLine(numbers[i]);
 }
 
-// Foreach loop
+// Foreach loop (slower)
 foreach (int num in numbers)
 {
     Console.WriteLine(num);
 }
 ```
-
-### Key Notes
-- Arrays are **fixed-size**; use `List<T>` for dynamic sizing.
-- Arrays are **reference types**, stored on the heap.
-- Index out-of-bounds errors throw `IndexOutOfRangeException`.
-- Multidimensional arrays (`[,]`) are rectangular; jagged arrays (`[][]`) allow varying sizes.
 
 
 

@@ -23,7 +23,7 @@ By convention, enum name should be in singular.
    - By default, enums use `int` as the underlying type, but you can specify other integral types (`byte`, `sbyte`, `short`, `ushort`, `uint`, `long`, `ulong`).
    - Example:
      ```csharp
-     enum Days : byte
+     enum Day : byte
      {
          Monday = 1,
          Tuesday = 2,
@@ -47,8 +47,8 @@ By convention, enum name should be in singular.
    - Enums are used to improve code readability and maintainability by replacing magic numbers or strings with meaningful names.
    - Example:
      ```csharp
-     Days today = Days.Monday;
-     if (today == Days.Monday)
+     Day today = Day.Monday;
+     if (today == Day.Monday)
      {
          Console.WriteLine("It's Monday!");
      }
@@ -57,15 +57,15 @@ By convention, enum name should be in singular.
 5. **Enum Methods**:
    - **ToString()**: Converts the enum value to its string representation.
      ```csharp
-     Console.WriteLine(Days.Monday); // Outputs: Monday
+     Console.WriteLine(Day.Monday); // Outputs: Monday
      ```
    - **Enum.Parse()**: Converts a string to an enum value.
      ```csharp
-     Days day = (Days)Enum.Parse(typeof(Days), "Tuesday");
+     Day day = (Day)Enum.Parse(typeof(Day), "Tuesday");
      ```
    - **Enum.GetValues()**: Retrieves all values in the enum.
      ```csharp
-     foreach (Days day in Enum.GetValues(typeof(Days)))
+     foreach (Day day in Enum.GetValues(typeof(Day)))
      {
          Console.WriteLine(day);
      }
@@ -95,7 +95,7 @@ By convention, enum name should be in singular.
      ```csharp
      switch (today)
      {
-         case Days.Monday:
+         case Day.Monday:
              Console.WriteLine("Start of the week!");
              break;
          default:
@@ -110,10 +110,10 @@ By convention, enum name should be in singular.
    - Enums are value types, so they are stored on the stack unless boxed.
 
 9. **Type Safety**:
-   - Enums prevent invalid values at compile time (e.g., you can’t assign `Days.Monday = 999`).
+   - Enums prevent invalid values at compile time (e.g., you can’t assign `Day.Monday = 999`).
    - However, casting an invalid integer to an enum is possible and may cause runtime issues:
      ```csharp
-     Days invalid = (Days)999; // Compiles but may lead to undefined behavior
+     Day invalid = (Day)999; // Compiles but may lead to undefined behavior
      ```
 
 10. **Best Practices**:
@@ -121,9 +121,9 @@ By convention, enum name should be in singular.
     - Avoid using enums for values that might change frequently or require complex logic.
     - Consider using `Enum.IsDefined()` to validate enum values when casting from integers or strings:
       ```csharp
-      if (Enum.IsDefined(typeof(Days), 1))
+      if (Enum.IsDefined(typeof(Day), 1))
       {
-          Days day = (Days)1;
+          Day day = (Day)1;
       }
       ```
 
@@ -131,7 +131,7 @@ By convention, enum name should be in singular.
 ```csharp
 using System;
 
-enum Days
+enum Day
 {
     Monday = 1,
     Tuesday,
@@ -146,14 +146,14 @@ class Program
 {
     static void Main()
     {
-        Days today = Days.Wednesday;
+        Day today = Day.Wednesday;
         Console.WriteLine($"Today is {today} (Value: {(int)today})"); // Outputs: Today is Wednesday (Value: 3)
 
         // Check if value is defined
         int input = 2;
-        if (Enum.IsDefined(typeof(Days), input))
+        if (Enum.IsDefined(typeof(Day), input))
         {
-            Days day = (Days)input;
+            Day day = (Day)input;
             Console.WriteLine($"Day from input: {day}"); // Outputs: Day from input: Tuesday
         }
     }

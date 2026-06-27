@@ -133,7 +133,7 @@ Choose based on your specific needs for semantics, performance, and behavior. If
 
 ### Value Types (`struct`) vs. Reference Types (`class`)
 
-In languages like Java, almost everything is an object living on the **Heap**. This means even a simple 2D coordinate $(X, Y)$ requires a heap allocation, memory tracking, and pointer dereferencing to read.
+In languages like Java, almost everything is an object living on the **Heap**. This means even a simple 2D coordinate (X, Y) requires a heap allocation, memory tracking, and pointer dereferencing to read.
 
 C# lets you choose exactly how memory is laid out using `struct`:
 
