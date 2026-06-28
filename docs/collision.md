@@ -51,7 +51,13 @@ public static class CollisionMath
         float distanceSquared = dx * dx + dy * dy;
         float radiusSum = radiusA + radiusB;
         
+        // It detects any part of the circle
+        // Use for collision in small scaled scenarios (projectiles, characters, vehicles, etc)
         return distanceSquared < (radiusSum * radiusSum);
+
+        // It detects only the center point of the circle.
+        // Use for detection in large scaled scenarios (global simulations, etc)
+        return distanceSquared < radar.RangeSquared;
     }
 
     // AABB-AABB Test: Classic overlap check for rectangular bounds

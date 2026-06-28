@@ -47,10 +47,10 @@ namespace SimulationEngine
     [StructLayout(LayoutKind.Sequential)] // By default structs are sequencial. Added StructLayout for visibility only, no need to add it.
     public struct PositionComp
     {
-        public double X;
-        public double Y;
+        public float X;
+        public float Y;
 
-        public PositionComp(double x, double y)
+        public PositionComp(float x, float y)
         {
             X = x;
             Y = y;
@@ -58,15 +58,17 @@ namespace SimulationEngine
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct SensorsComp
+    public struct SensorComp
     {
-        public float RadarRangeNM;
-        public bool IsActiveEmission;
+        public float Range;
+        public float RangeSquared;
+        public bool IsEnabled;
 
-        public SensorsComp(float range, bool active)
+        public SensorComp(float range, bool isEnabled)
         {
-            RadarRangeNM = range;
-            IsActiveEmission = active;
+            Range = range;
+            RangeSquared = range * range;
+            IsEnabled = isEnabled;
         }
     }
 
@@ -75,25 +77,26 @@ namespace SimulationEngine
         // 2. The Method using 'in' parameters
         // 'in' passes a raw memory address pointer (highly efficient for larger structures),
         // but the compiler will throw an error if you try to modify 'pos' or 'radar' inside.
-        public static bool IsWithinRadarRange(in PositionComp sourcePos, in PositionComp targetPos, in SensorsComp radar)
+        public static bool IsWithinRadarRange(in PositionComp sourcePos, in PositionComp targetPos, in SensorComp radar)
         {
-            if (!radar.IsActiveEmission)
+            if (!radar.IsEnabled)
                 return false;
 
             // Highly efficient math performed directly on the stack memory. Zero copying of structs.
-            double deltaX = targetPos.X - sourcePos.X;
-            double deltaY = targetPos.Y - sourcePos.Y;
-            double distance = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+            float deltaX = targetPos.X - sourcePos.X;
+            float deltaY = targetPos.Y - sourcePos.Y;
+            float distanceSquared = (deltaX * deltaX) + (deltaY * deltaY);
+            Console.WriteLine($"Distance: {distanceSquared}. Radar Range: {radar.RangeSquared}");
 
-            return distance <= radar.RadarRangeNM;
+            return distanceSquared <= radar.RangeSquared;
         }
 
         public static void Main()
         {
             // 3. Create component instances on the stack
-            PositionComp ussPasadenaPos = new PositionComp(120.15, 30.85);
-            PositionComp targetPos = new PositionComp(120.45, 31.15);
-            SensorsComp passiveRadar = new SensorsComp(50.0f, true);
+            PositionComp ussPasadenaPos = new PositionComp(120.15f, 30.85f);
+            PositionComp targetPos = new PositionComp(170.14f, 31.15f);
+            SensorComp passiveRadar = new SensorComp(50.0f, true);
 
             // 4. Pass by reference implicitly
             bool detected = IsWithinRadarRange(ussPasadenaPos, targetPos, passiveRadar);
@@ -102,7 +105,6 @@ namespace SimulationEngine
         }
     }
 }
-
 ```
 
 #### Why this structure provides the "best of both worlds":
