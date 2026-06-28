@@ -51,13 +51,7 @@ public static class CollisionMath
         float distanceSquared = dx * dx + dy * dy;
         float radiusSum = radiusA + radiusB;
         
-        // It detects any part of the circle
-        // Use for collision in small scaled scenarios (projectiles, characters, vehicles, etc)
         return distanceSquared < (radiusSum * radiusSum);
-
-        // It detects only the center point of the circle.
-        // Use for detection in large scaled scenarios (global simulations, etc)
-        return distanceSquared < radar.RangeSquared;
     }
 
     // AABB-AABB Test: Classic overlap check for rectangular bounds
@@ -78,6 +72,19 @@ public static class CollisionMath
     
         return dx * dx + dy * dy <= radius * radius;
     }
+
+    // Point-in-Circle Test: Checks if a point (posA) is within range of a circle center (posB)
+    // Used for radar system in large scaled scenarios, it detects the position of the target, not its shape
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsPointInCircle(Vector2 posA, Vector2 posB, float radiusB)
+    {
+        float dx = posA.X - posB.X;
+        float dy = posA.Y - posB.Y;
+        float distanceSquared = dx * dx + dy * dy;
+        
+        return distanceSquared < (radiusB * radiusB);
+    }
+
 }
 ```
 
@@ -107,7 +114,16 @@ bool colliding = CollisionMath.IsOverlapping(
     transforms[j].Origin, halfSize);
 ```
 
-The three implementations are not mutually exclusive. They can be used together at the same time.
+#### Point in Circle
+
+```csharp
+bool inRange = CollisionMath.IsPointInCircle(
+    transforms[i].Origin,           // The target (point being checked)
+    transforms[j].Origin,           // The sensor (center of the radar)
+    Radius;                         // The range of the sensor
+```
+
+The four implementations are not mutually exclusive. They can be used together at the same time.
 
 ### Collision Methodology Reference
 
