@@ -5,7 +5,7 @@ The game utilizes a **Hybrid Physics Strategy**, balancing performance-critical 
 ## 1. Physics Engine Architecture
 
 * **Custom C# Collision System (Fast Path)**: A high-performance, data-oriented physics layer designed to handle thousands of entities per frame. It operates outside of the Godot SceneTree to eliminate object instantiation and node-traversal overhead.
-* **Godot PhysicsServer2D (Reliable Path)**: Used for complex, edge-case interactions and static environment collisions. By interacting directly with the `PhysicsServer2D` API, we achieve precise geometric collision resolution without the memory overhead of instantiating `PhysicsBody` nodes or `Area2D` objects.
+* **Godot PhysicsServer2D** & **PhysicsDirectSpaceState2D (Reliable Path)**: Used for complex, edge-case interactions and static environment collisions. While `PhysicsServer2D` manages the world state, we access its `PhysicsDirectSpaceState2D` interface to perform high-performance, headless geometric queries (raycasts, shape-casts). This allows for precise geometric resolution without the memory overhead of `PhysicsBody` nodes."
 
 ## 2. Custom C# System: Dynamics
 
@@ -298,6 +298,11 @@ Since your C# system handles IDs up to `MaxEntityCapacity`, ensure that **no par
 
 ## 8. Godot Integration
 
+- Godot Documentation:
+    * [Transform2D](https://docs.godotengine.org/en/stable/classes/class_transform2d.html)
+    * [PhysicsServer2D](https://docs.godotengine.org/en/stable/classes/class_physicsserver2d.html)
+    * [PhysicsDirectSpaceState2D](https://docs.godotengine.org/en/stable/classes/class_physicsdirectspacestate2d.html)
+
 We can use a combination of custom C# collision implementation and Godot `PhysicsServer2D` solution. There are three possibles architectures:
 
 ### 8.1. Custom Dynamic Collision + Physics Queries
@@ -348,7 +353,7 @@ The static world remains inside Godot's physics engine, while dynamic entities r
 
 The narrowphase delegation has been updated to use `PhysicsDirectSpaceState2D`, as this is the correct interface for performing geometric queries against the physics world.
 
-Dynamic entities are still owned by your C# simulation, but `PhysicsDirectSpaceState2D` is used as the narrowphase collision engine for precise geometry tests.
+Dynamic entities are still owned by your C# simulation, but `PhysicsDirectSpaceState2D` is used as the high performance narrowphase collision engine for precise geometry tests.
 
 When dynamic entities require more sophisticated collision geometry, keep entity ownership and broadphase culling inside your C# simulation, but delegate the precise collision tests to `PhysicsDirectSpaceState2D`.
 
@@ -356,7 +361,7 @@ In this architecture, Godot does not own or simulate your entities. It acts pure
 
 #### Broadphase
 
-Implement a **Spatial Grid** inside your C# model.
+Implement a **Spatial Grid** inside your C# model to filter entities into candidate pairs.
 
 Each frame:
 
@@ -368,7 +373,7 @@ This keeps the complexity close to O(N).
 
 #### Narrowphase
 
-For the candidate pairs produced by the grid:
+For candidate pairs, query the `PhysicsDirectSpaceState2D`. Use `IntersectShape` or `IntersectRay` to perform exact geometric intersection tests. Retrieve the collision normal or penetration depth directly from the result and apply it to your C# transforms:
 
 * Query `PhysicsDirectSpaceState2D`.
 * Perform exact shape intersection tests.
@@ -431,7 +436,7 @@ These tests are extremely fast and require no interaction with Godot.
 
 #### Complex Shapes
 
-Delegate collision checks to `PhysicsDirectSpaceState2D`:
+Delegate collision checks to `PhysicsDirectSpaceState2D`. Use it as a geometry service to perform exact shape intersection tests. You are not using Godot to simulate the entities; you are using the `DirectSpaceState` as a 'math-calculator' to resolve complex overlaps that custom C# math cannot easily handle:
 
 * Convex polygons
 * Rotated hitboxes
@@ -485,6 +490,15 @@ The static world remains inside Godot's physics engine, while all dynamic entiti
 * Keeps the ECS/DOD simulation pure and cache-friendly.
 * Avoids thousands of `Area2D` or `RigidBody2D` nodes.
 * Scales naturally as the game's collision requirements grow.
+
+### Summary of the Integration Strategy
+
+Make the following distinction clear to any developer reading the documentation:
+
+1. **`PhysicsServer2D`** = The **Manager** (It owns the physics world instance).
+2. **`PhysicsDirectSpaceState2D`** = The **Calculator** (It performs the actual spatial queries).
+
+This clarifies that your ECS is in control of the *simulation*, while Godot provides the *geometric calculations* on demand. Does this refactoring help align the documentation with the specific way you intend to call these functions in your `EngineBridge`?
 
 ### Comparison
 

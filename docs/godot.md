@@ -6,8 +6,9 @@ To maximize productivity while maintaining the architectural integrity of your D
 
 ### 1. The "Embrace Without Hesitation" List
 
-* **`Transform2D` / `Vector2` (The Standardized Math Primitives):** These are pure, stack-allocated math structs. By using them in your ECS, you gain access to optimized rotation and affine transformation logic without any `Node` overhead. By utilizing these as your core "data currency," you maintain a clean simulation layer that is entirely decoupled from the engine. Because they are "blittable" (raw data), they allow for high-performance, low-overhead translation via your `GodotService` bridge—enabling you to pipeline state from your C# `MovementSystem` directly to the `RenderingServer` with minimal translation cost.
 * **`PhysicsServer2D` (The Geometry Math Service):** Treat this as a headless, C++-powered math engine. Use it to offload the "Narrowphase" collision heavy lifting (intersection tests, raycasts, shape-casts) for both static world geometry and dynamic swarm candidates identified by your `SpatialGrid`. This allows you to resolve complex collisions using industry-standard geometry solvers without ever instantiating a `Node` or `PhysicsBody` in the `SceneTree`.
+* **`PhysicsDirectSpaceState2D` (The Spatial Query Interface):** This is the high-performance calculator you extract from the `PhysicsServer2D` to perform instantaneous world queries. While the `PhysicsServer2D` manages the world's objects, the `DirectSpaceState` is the specific object used to execute raycasts, shape-casts, and intersection tests. It is inherently more efficient than `Node`-based physics because it returns data immediately without needing to trigger the `SceneTree` or callback signals, making it perfect for high-frequency collision checks in your `MovementSystem` or `CombatSystem`.
+* **`Transform2D` / `Vector2` (The Standardized Math Primitives):** These are pure, stack-allocated math structs. By using them in your ECS, you gain access to optimized rotation and affine transformation logic without any `Node` overhead. By utilizing these as your core "data currency," you maintain a clean simulation layer that is entirely decoupled from the engine. Because they are "blittable" (raw data), they allow for high-performance, low-overhead translation via your `GodotService` bridge—enabling you to pipeline state from your C# `MovementSystem` directly to the `RenderingServer` with minimal translation cost.
 * **`RenderingServer` (The GPU Interface):** Allows you to draw thousands of objects using raw data without touching a `Node`. You can create a `MultiMesh` and update its buffers directly from your C# `Span<Transform2D>`. It is the ultimate separation of View and Model.
 * **`NavigationServer2D` (The Spatial Service):** Baking navigation meshes is complex. Use Godot’s editor to define navigation regions, then treat the `NavigationServer` as a black box—query it for path waypoints and feed those back into your own C# `MovementSystem`.
 * **`Input` (The Input Polling Service):** Godot’s input handling is robust and handles hardware abstraction for you. Do not use Node-based signals (`_input` or `_unhandled_input`), as they force you to use the `SceneTree`. Instead, use **polling** (`Input.IsActionPressed`) inside your C# `Controller`. This allows your systems to treat the "Input State" as just another piece of data passed into your loop.
@@ -25,6 +26,12 @@ Why this is the correct architectural path
     * [PhysicsServer2D](https://docs.godotengine.org/en/stable/classes/class_physicsserver2d.html)
     * [PhysicsDirectSpaceState2D](https://docs.godotengine.org/en/stable/classes/class_physicsdirectspacestate2d.html)
 
+#### PhysicsServer2D vs PhysicsDirectSpaceState2D
+
+| Component | Responsibility |
+| --- | --- |
+| **`PhysicsServer2D`** | The "World Factory": Manages physics bodies and worlds. |
+| **`PhysicsDirectSpaceState2D`** | The "Query Calculator": Executing raycasts and shape intersection tests. |
 
 
 ### 3. High-Performance Rendering (GPU Instancing)
@@ -40,6 +47,25 @@ Since you are using Godot, you should use **`MultiMeshInstance2D`** or **`GPUPar
 ### 4. The "Bridge" Strategy
 
 To maintain separation, wrap Godot’s features in **Static Helper Facades**. This prevents engine-specific code (`using Godot;`) from infiltrating your core ECS logic.
+
+#### Example: Physics Bridge
+
+```csharp
+// Example of the proper integration in your GodotService bridge
+public static class PhysicsBridge {
+    // Cache the state for the current frame to avoid redundant lookups
+    private static PhysicsDirectSpaceState2D _cachedState;
+
+    public static void Initialize(World2D world) {
+        _cachedState = world.DirectSpaceState;
+    }
+
+    public static bool Raycast(Vector2 from, Vector2 to) {
+        var query = PhysicsRayQueryParameters2D.Create(from, to);
+        return _cachedState.IntersectRay(query).Count > 0;
+    }
+}
+```
 
 #### Example: Rendering Facade
 
@@ -70,12 +96,13 @@ public static class InputFacade {
 
 | Godot Feature | How to embrace it | Why it's safe |
 | --- | --- | --- |
-| **Input** | `Input` (Polling) | Decouples input state from signals; easy to swap for other engines. |
+| **Physics Geometry** | `PhysicsServer2D` | Centralized management of physics objects and static geometry. |
+| **Spatial Queries** | `PhysicsDirectSpaceState2D` | Direct, headless execution of intersection/raycast logic. |
 | **Math Primitives** | `Transform2D` / `Vector2` | Pure math structs; zero overhead; no `SceneTree` dependency.. |
-| **Rendering** | `RenderingServer` / `MultiMesh` | Decouples data from Nodes. |
+| **Rendering** | `RenderingServer` / `MultiMesh` | Decouples data from Nodes for GPU instancing. |
+| **Input** | `Input` (Polling) | Decouples input state from signals; easy to swap for other engines. |
 | **Pathfinding** | `NavigationServer2D` | Only used for path data, not NPC logic. |
 | **Assets** | `ResourceLoader` | Just provides data handles (IDs). |
-| **Physics** | `PhysicsServer2D` | Used for querying static and dynamic geometry. |
 | **Logic** | Spatial Grid (C#) | Optimized for high-density dynamic entities. |
 | **Editor** | Inspector/Scene Editor | Use it to set up *static* world data only. |
 
@@ -193,8 +220,8 @@ sequenceDiagram
 
 By using this hybrid approach:
 
-1. **Dynamic Interactions (Bullets/Enemies/Hordes):** Managed as a two-stage process. Your **C# Spatial Grid** acts as the *Broadphase*, quickly filtering memory to identify potential collision candidates. For these identified candidates, the engine performs a *Narrowphase* query by delegating the geometry math to the **PhysicsServer2D**, allowing for complex shape support and precise intersection detection without ever needing to track individual bodies in the scene tree.
-2. **Static collisions (walls/floor)** happen via queries to the **PhysicsServer2D**.
+1. **Dynamic Interactions (Bullets/Enemies/Hordes):** Managed as a two-stage process. Your **C# Spatial Grid** acts as the *Broadphase*, quickly filtering memory to identify potential collision candidates. For these identified candidates, the engine performs a *Narrowphase* query by delegating the geometry math to the `PhysicsDirectSpaceState2D` (adquired via the `PhysicsServer2D`), allowing for complex shape support and precise intersection detection without tracking individual nodes in the scene tree."
+2. **Static collisions (walls/floor)** happen via spatial queries to the `PhysicsDirectSpaceState2D` (acquired from `PhysicsServer2D.GetWorld2D().DirectSpaceState`).
 3. **Visualization** happens by pushing your `Transform2D` buffers to the **RenderingServer**.
 
 This allows you to bypass the `SceneTree` entirely for your 5,000+ NPCs. You are essentially using Godot as a low-level graphics and physics query engine, while your C# code maintains the "Source of Truth" for your game's active state.
